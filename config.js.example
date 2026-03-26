@@ -1,0 +1,8 @@
+// Generated at deploy. Set env vars before deploy:
+//   OPENAI_API_KEY=sk-... ANTHROPIC_API_KEY=sk-ant-... GOOGLE_GMAIL_CLIENT_ID=51515298953-xxx.apps.googleusercontent.com ./deploy.sh
+//
+// Gmail Sync: In Google Cloud Console, add Authorized JavaScript origin:
+//   https://familyos-e3d4b.web.app
+// Enable Gmail API in APIs & Services.
+window.FAMILYOS_OCR_CONFIG={provider:"openai",openaiKey:"",anthropicKey:""};
+window.FAMILYOS_GMAIL_CLIENT_ID="";

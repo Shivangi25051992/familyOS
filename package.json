@@ -1,0 +1,8 @@
+{
+  "name": "familyos",
+  "private": true,
+  "scripts": {
+    "test": "node tests/expense-utils.test.js",
+    "test:sync": "node test-sync-automated.js"
+  }
+}
