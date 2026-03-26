@@ -1546,6 +1546,29 @@ try {
 }
 
 // ══ STATE ══
+// ── LLM MODEL CONFIG ──────────────────────────
+const LLM_MODELS = {
+  // Medical report analysis — accuracy critical
+  // DO NOT downgrade this for father's health
+  medicalReports: "claude-sonnet-4-20250514",
+
+  // Ask AI medical questions — accuracy critical
+  medicalQA: "claude-sonnet-4-20250514",
+
+  // Medication parsing from voice/photo
+  medicationParse: "claude-sonnet-4-20250514",
+
+  // Visit notes parsing — moderate complexity
+  visitNotes: "claude-haiku-4-5-20251001",
+
+  // Receipt OCR and pasted text parsing
+  receiptOcr: "claude-haiku-4-5-20251001",
+
+  // OpenAI models
+  openaiOcr: "gpt-4o",
+  openaiFallback: "gpt-4o-mini",
+};
+// ─────────────────────────────────────────────
 let CU=null, FID=null, FD=null, myRole=null, myPerms=null;
 let myName='Me', partnerName='Partner';
 let data={expenses:[],tasks:[],reminders:[],kidEvents:[],autoExpenses:[],healthProfiles:[]};
@@ -1738,8 +1761,9 @@ onAuthStateChanged(auth,async user=>{
       try{
         uDoc=await getDoc(doc(db,'users',user.uid));
       }catch(e){
-        if((e?.code==='permission-denied'||e?.message?.includes('permission'))&&new URLSearchParams(location.search).get('gmailConnected')){
-          await new Promise(r=>setTimeout(r,2500));
+        if(e?.code==='permission-denied'||e?.message?.includes('permission')){
+          console.warn('Initial user read failed, retrying with delay...');
+          await new Promise(r=>setTimeout(r,2000));
           uDoc=await getDoc(doc(db,'users',user.uid));
         }else throw e;
       }
@@ -3541,7 +3565,7 @@ async function renderHealthOverview() {
     <div class="health-stats-row">
       <div class="health-stat-card"><div class="health-stat-val">${activePatientData.reports.length}</div><div class="health-stat-lbl">Reports</div></div>
       <div class="health-stat-card"><div class="health-stat-val">${activePatientData.medications.filter(m=>m.active!==false).length}</div><div class="health-stat-lbl">Meds</div></div>
-      <div class="health-stat-card"><div class="health-stat-val" style="font-size:12px">${nextVisit}</div><div class="health-stat-lbl">Next Visit</div></div>
+      <div class="health-stat-card"><div class="health-stat-val" style="font-size:12px">${nextVisit !== 'None' ? formatReportDate(nextVisit) : 'None'}</div><div class="health-stat-lbl">Next Visit</div></div>
       <div class="health-stat-card"><div class="health-stat-val">${fmt(totalBills)}</div><div class="health-stat-lbl">Total Bills</div></div>
     </div>
 
@@ -3574,7 +3598,7 @@ async function renderHealthOverview() {
             <div class="health-timeline-icon">${e.type==='report'?'📄':e.type==='visit'?'🏥':e.type==='medication'?'💊':'📝'}</div>
             <div class="health-timeline-content">
               <div class="health-timeline-title">${e.title}</div>
-              <div class="health-timeline-date">${fmtDate(e.date)}</div>
+              <div class="health-timeline-date">${formatReportDate(e.date)}</div>
             </div>
           </div>
         `).join('')}
@@ -3607,7 +3631,7 @@ async function renderHealthReports() {
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="sec-title" style="font-size:18px">Medical Reports</div>
-      <button class="btn-sm fill" onclick="openModal('modal-health-report')">+ Add Report</button>
+      <button class="btn-sm fill" onclick="openAddReportModal()">+ Add Report</button>
     </div>
     ${trendHtml}
     <div id="health-reports-list">
@@ -3616,7 +3640,7 @@ async function renderHealthReports() {
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
               <div class="health-card-title">${r.title}</div>
-              <div class="health-card-sub">${fmtDate(r.date)}</div>
+              <div class="health-card-sub">${formatReportDate(r.date)}</div>
             </div>
             <span class="health-urgency-badge urgency-${r.urgency || 'routine'}">${r.urgency || 'routine'}</span>
           </div>
@@ -3767,7 +3791,7 @@ async function generateAISummary() {
   const prompt = `Summarize the current status of this patient in 3-4 sentences. Mention key things to watch and upcoming considerations. Be compassionate and clear.`;
 
   try {
-    const summary = await callClaudeHealth(prompt, context);
+    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalReports);
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummary: summary, updatedAt: serverTimestamp() });
     document.getElementById('health-ai-summary-text').textContent = summary;
   } catch(e) { console.error(e); showToast('AI error'); }
@@ -3809,12 +3833,15 @@ async function askHealthAI(profileId, question) {
     Recent visits: ${visits.map(v => `[${v.date}] ${v.hospital}: ${v.notes}`).join('\n')}
   `;
 
-  return await callClaudeHealth(question, context, true); // true for medical assist persona
+  return await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA);
 }
 
-async function callClaudeHealth(prompt, context, isCompassionatePersona = false) {
+async function callClaudeHealth(prompt, context, isCompassionatePersona = false, model = LLM_MODELS.medicalQA) {
   const apiKey = window.FAMILYOS_OCR_CONFIG?.anthropicKey;
-  if(!apiKey) throw new Error('Claude API key missing');
+  if(!apiKey) {
+    showToast('Anthropic API key is missing in config.js');
+    throw new Error('Claude API key missing');
+  }
 
   const systemPrompt = isCompassionatePersona 
     ? `You are a compassionate medical information assistant helping an Indian family caregiver understand their family member's medical condition. Answer questions clearly and compassionately in simple language. ALWAYS recommend consulting the treating doctor for any treatment decisions. Be honest about uncertainty. Use simple language, avoid jargon. Answer in the same language the question is asked (Hindi or English).`
@@ -3829,19 +3856,65 @@ async function callClaudeHealth(prompt, context, isCompassionatePersona = false)
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20240620',
+      model: model,
       max_tokens: 1000,
       system: systemPrompt + `\n\nContext:\n${context}`,
       messages: [{ role: 'user', content: prompt }]
     })
   });
 
+  if (!response.ok) {
+    const err = await response.json();
+    console.error('Claude API error:', err);
+    throw new Error(`API error ${response.status}: ${err.error?.message || 'Unknown'}`);
+  }
+
   const resData = await response.json();
-  if(resData.error) throw new Error(resData.error.message);
   return resData.content[0].text;
 }
 
 // ══ VOICE & UTILS ══
+function formatReportDate(dateStr) {
+  if (!dateStr || dateStr === 'undefined' || dateStr === 'null') return 'Date unknown';
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function safeParseJSON(text) {
+  try {
+    const cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
+    return JSON.parse(cleaned);
+  } catch(e) {
+    console.error('JSON parse failed:', e, 'Raw text:', text);
+    return null;
+  }
+}
+
+async function compressReportImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX || h > MAX) {
+          if (w > h) { h = (h/w)*MAX; w = MAX; }
+          else { w = (w/h)*MAX; h = MAX; }
+        }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const compressed = canvas.toDataURL('image/jpeg', 0.7);
+        resolve(compressed.split(',')[1]);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function startVoiceInput(targetInputId, onResult) {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
     showToast('Voice input not supported on this browser');
@@ -3862,44 +3935,102 @@ function startVoiceInput(targetInputId, onResult) {
 async function handleHealthReport(input) {
   const file = input.files[0]; if(!file) return;
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-  showToast('Analysing report...');
+  showToast('Reading report... this takes 10-15 seconds');
   
   try {
-    const base64 = await compressImage(file, 1200, 0.6);
-    const prompt = `Analyse this medical report for a patient with ${p.diagnosis}. Respond only in JSON.`;
-    const system = `You are a medical report interpreter for family caregivers in India. Explain medical reports in simple, clear language that a non-medical person can understand. Be compassionate and clear. Return JSON: { title, date, summary, keyFindings: [{name, value, unit, normalRange, flag, plainExplanation}], actionItems: [string], urgency: 'routine'|'watch'|'urgent' }`;
+    const base64NoPrefix = await compressReportImage(file);
+    const system = `You are a medical report interpreter for family caregivers in India. Explain medical reports in simple, clear language that a non-medical person can understand. Be compassionate and clear. Respond only in JSON.`;
+    const prompt = `Analyse this medical report for a patient with ${p.diagnosis}. Return JSON only:
+{
+  "title": "report type",
+  "date": "YYYY-MM-DD or null",
+  "summary": "plain English explanation 3-5 sentences",
+  "keyFindings": [
+    {
+      "name": "test name",
+      "value": "result",
+      "unit": "unit",
+      "normalRange": "range",
+      "flag": "normal|low|high|critical",
+      "plainExplanation": "one sentence"
+    }
+  ],
+  "actionItems": ["string"],
+  "urgency": "routine|watch|urgent"
+}
+Respond with JSON only. No markdown. No explanation.`;
     
-    const res = await callClaudeVision(system, prompt, base64);
-    const reportData = JSON.parse(res);
-    reportData.imageBase64 = base64;
+    const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalReports);
+    const reportData = safeParseJSON(res);
+    
+    if (!reportData) {
+      showToast('Could not read report format — try a clearer photo');
+      return;
+    }
+    
+    // Ensure we use aiSummary for consistency
+    if (reportData.summary && !reportData.aiSummary) {
+      reportData.aiSummary = reportData.summary;
+    }
+    
+    reportData.imageBase64 = 'data:image/jpeg;base64,' + base64NoPrefix;
     
     document.getElementById('health-report-analysis').innerHTML = `
       <div class="health-card-title">${reportData.title}</div>
-      <div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">${reportData.summary}</div>
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">${reportData.aiSummary}</div>
       <div style="font-size:11px;color:var(--gold)">Urgency: ${reportData.urgency}</div>
     `;
     document.getElementById('health-report-preview').style.display = 'block';
     document.getElementById('health-report-upload').style.display = 'none';
     window._pendingReport = reportData;
-  } catch(e) { console.error(e); showToast('Analysis failed'); }
+  } catch(e) { 
+    console.error('handleHealthReport exception:', e);
+    const status = e.message.match(/API error (\d+)/)?.[1];
+    if (status === '400') showToast('Image too large or wrong format — try again');
+    else if (status === '401') showToast('API key error — check settings');
+    else if (status === '529') showToast('AI service busy — try in 30 seconds');
+    else showToast('Connection error — check internet and try again');
+  }
 }
 
+window.openAddReportModal = () => {
+  window._pendingReport = null;
+  const input = document.getElementById('health-report-input');
+  if (input) input.value = '';
+  const preview = document.getElementById('health-report-preview');
+  if (preview) preview.style.display = 'none';
+  const upload = document.getElementById('health-report-upload');
+  if (upload) upload.style.display = 'block';
+  const analysis = document.getElementById('health-report-analysis');
+  if (analysis) analysis.innerHTML = '';
+  openModal('modal-health-report');
+};
+
+let isSavingReport = false;
 async function confirmSaveReport() {
+  if (isSavingReport) return;
   const r = window._pendingReport;
   if(!r) return;
+  isSavingReport = true;
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
     await addDoc(collection(db, `${base}/reports`), { ...r, addedAt: serverTimestamp() });
-    await addDoc(collection(db, `${base}/timeline`), { date: r.date || todayStr(), type: 'report', title: r.title, detail: r.summary, addedAt: serverTimestamp() });
+    await addDoc(collection(db, `${base}/timeline`), { date: r.date || todayStr(), type: 'report', title: r.title, detail: r.aiSummary || r.summary, addedAt: serverTimestamp() });
     showToast('Report saved ✓');
     closeModal('modal-health-report');
+    window._pendingReport = null;
     renderHealthReports();
   } catch(e) { console.error(e); showToast('Error saving'); }
+  finally { isSavingReport = false; }
 }
 
 // Reuse existing receipt vision logic but specialized
-async function callClaudeVision(system, prompt, base64) {
+async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODELS.medicalReports) {
   const apiKey = window.FAMILYOS_OCR_CONFIG?.anthropicKey;
+  if(!apiKey) {
+    showToast('Anthropic API key is missing in config.js');
+    throw new Error('Claude API key missing');
+  }
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 
@@ -3909,15 +4040,33 @@ async function callClaudeVision(system, prompt, base64) {
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20240620',
+      model: model,
       max_tokens: 2000,
       system,
-      messages: [{ role: 'user', content: [
-        { type: 'text', text: prompt },
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64.split(',')[1] } }
-      ]}]
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: 'image/jpeg',
+              data: base64NoPrefix
+            }
+          },
+          {
+            type: 'text',
+            text: prompt
+          }
+        ]
+      }]
     })
   });
+  if (!response.ok) {
+    const err = await response.json();
+    console.error('Claude API error:', err);
+    throw new Error(`API error ${response.status}: ${err.error?.message || 'Unknown'}`);
+  }
   const data = await response.json();
   return data.content[0].text;
 }
@@ -3957,8 +4106,9 @@ async function saveVisit() {
   if(!date || !hospital) return;
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
-    const res = await callClaudeHealth(`Extract 3-5 key action items from these visit notes. Return as a JSON array of strings. Notes: ${notes}`, `Patient with ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).diagnosis}`);
-    let actionItems = []; try { actionItems = JSON.parse(res); } catch(e) { actionItems = [res]; }
+    const res = await callClaudeHealth(`Extract 3-5 key action items from these visit notes. Return as a JSON array of strings. Notes: ${notes}`, `Patient with ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).diagnosis}`, false, LLM_MODELS.visitNotes);
+    let actionItems = safeParseJSON(res);
+    if (!actionItems) actionItems = [res];
     
     await addDoc(collection(db, `${base}/visits`), { date, hospital, doctor, type, notes, actionItems, nextVisit: next, addedAt: serverTimestamp() });
     await addDoc(collection(db, `${base}/timeline`), { date, type: 'visit', title: `${type.toUpperCase()} at ${hospital}`, detail: notes.slice(0, 100), addedAt: serverTimestamp() });
@@ -3971,16 +4121,17 @@ async function handleHealthBillPhoto(input) {
   const file = input.files[0]; if(!file) return;
   showToast('Reading bill...');
   try {
-    const base64 = await compressImage(file, 1200, 0.6);
+    const base64NoPrefix = await compressReportImage(file);
     const system = `You are a medical bill reader. Extract: amount (number), date (YYYY-MM-DD), hospital (string), category ('consultation'|'medicine'|'test'|'procedure'). Return JSON only.`;
-    const res = await callClaudeVision(system, "Extract bill details", base64);
-    const b = JSON.parse(res);
+    const res = await callClaudeVision(system, "Extract bill details", base64NoPrefix, LLM_MODELS.receiptOcr);
+    const b = safeParseJSON(res);
+    if (!b) { showToast('Could not read bill format'); return; }
     document.getElementById('hb-date').value = b.date || todayStr();
     document.getElementById('hb-hospital').value = b.hospital || '';
     document.getElementById('hb-amount').value = b.amount || 0;
     document.getElementById('hb-cat').value = b.category || 'procedure';
     document.getElementById('hb-preview').style.display = 'block';
-    window._pendingBillBase64 = base64;
+    window._pendingBillBase64 = 'data:image/jpeg;base64,' + base64NoPrefix;
   } catch(e) { console.error(e); showToast('Bill reading failed'); }
 }
 
@@ -4030,8 +4181,9 @@ async function generateDoctorSummary() {
 async function parseMedVoice(transcript) {
   showToast('Parsing...');
   try {
-    const res = await callClaudeHealth(`Extract medication details: name, dose, frequency, timing, notes. Return JSON only. Text: ${transcript}`, "Parsing med voice");
-    const m = JSON.parse(res);
+    const res = await callClaudeHealth(`Extract medication details: name, dose, frequency, timing, notes. Return JSON only. Text: ${transcript}`, "Parsing med voice", false, LLM_MODELS.medicationParse);
+    const m = safeParseJSON(res);
+    if (!m) return;
     document.getElementById('hm-name').value = m.name || '';
     document.getElementById('hm-dose').value = m.dose || '';
     document.getElementById('hm-freq').value = m.frequency || '';
@@ -4044,11 +4196,11 @@ async function handleMedPhoto(input) {
   const file = input.files[0]; if(!file) return;
   showToast('Reading prescription...');
   try {
-    const base64 = await compressImage(file, 1200, 0.6);
+    const base64NoPrefix = await compressReportImage(file);
     const system = `Extract all medications from this prescription. Return a JSON array of objects: {name, dose, frequency, timing, notes}. Respond only in JSON.`;
-    const res = await callClaudeVision(system, "Extract medications", base64);
-    const meds = JSON.parse(res);
-    if(meds.length) {
+    const res = await callClaudeVision(system, "Extract medications", base64NoPrefix, LLM_MODELS.medicationParse);
+    const meds = safeParseJSON(res);
+    if(meds && meds.length) {
       const m = meds[0]; // For now just take the first one or we could loop
       document.getElementById('hm-name').value = m.name || '';
       document.getElementById('hm-dose').value = m.dose || '';
@@ -4429,7 +4581,10 @@ window.openModal=id=>{
     document.getElementById('gmail-emails-list').innerHTML='';
   }
 };
-window.closeModal=id=>document.getElementById(id).classList.remove('open');
+window.closeModal = id => {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'modal-health-report') window._pendingReport = null;
+};
 document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m){ m.classList.remove('open'); clearEditMode(); }}));
 
 
@@ -4835,7 +4990,7 @@ async function parseReceiptWithOCR(dataUrl){
     try{
       const res=await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:'gpt-4o',max_tokens:256,
+        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,
           messages:[{role:'user',content:[
             {type:'image_url',image_url:{url:dataUrl}},
             {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
@@ -4854,8 +5009,8 @@ async function parseReceiptWithOCR(dataUrl){
   const base64Data=m[2];
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-3-5-sonnet-20241022',max_tokens:256,
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,
         messages:[{role:'user',content:[
           {type:'image',source:{type:'base64',media_type:mediaType,data:base64Data}},
           {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
@@ -4892,7 +5047,7 @@ async function parsePastedText(text){
     try{
       const res=await fetch('https://api.openai.com/v1/chat/completions',{
         method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:'gpt-4o',max_tokens:256,messages:[{role:'user',content:prompt}]})
+        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
       });
       if(!res.ok) return null;
       const json=await res.json();
@@ -4904,8 +5059,8 @@ async function parsePastedText(text){
   }
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
-      body:JSON.stringify({model:'claude-3-5-sonnet-20241022',max_tokens:256,messages:[{role:'user',content:prompt}]})
+      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
     });
     if(!res.ok) return null;
     const json=await res.json();
@@ -4998,6 +5153,7 @@ window.switchHealthTab = switchHealthTab;
 window.generateAISummary = generateAISummary;
 window.handleHealthAsk = handleHealthAsk;
 window.startVoiceInput = startVoiceInput;
+window.openAddReportModal = openAddReportModal;
 window.handleHealthReport = handleHealthReport;
 window.confirmSaveReport = confirmSaveReport;
 window.saveMedication = saveMedication;

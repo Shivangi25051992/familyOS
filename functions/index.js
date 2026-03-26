@@ -8,6 +8,21 @@ const { google } = require("googleapis");
 const Anthropic = require("@anthropic-ai/sdk").default;
 const crypto = require("crypto");
 
+// ── LLM MODEL CONFIG ──────────────────────────
+// Change models here — affects entire app
+const LLM_MODELS = {
+  // Gmail email parsing — simple extraction
+  // Cheap model fine here, no medical data
+  gmailParsing: "claude-haiku-4-5-20251001",
+
+  // Receipt OCR — simple amount extraction
+  receiptOcr: "claude-haiku-4-5-20251001",
+
+  // Fallback for OpenAI
+  openaiFallback: "gpt-4o-mini",
+};
+// ─────────────────────────────────────────────
+
 initializeApp();
 const db = getFirestore();
 
@@ -393,7 +408,7 @@ If no purchase amount found anywhere, return {"skip":true}`;
         Authorization: `Bearer ${openaiKey.trim()}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: LLM_MODELS.openaiFallback,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -411,7 +426,7 @@ If no purchase amount found anywhere, return {"skip":true}`;
   if (anthropicKey && anthropicKey.trim()) {
     const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
     const parseRes = await anthropic.messages.create({
-      model: "claude-3-5-haiku-20241022",
+      model: LLM_MODELS.gmailParsing,
       max_tokens: 256,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
@@ -788,7 +803,7 @@ Reply with exactly 2-3 bullet points, one per line. No numbering, no intro.`;
             Authorization: `Bearer ${openaiKey.trim()}`,
           },
           body: JSON.stringify({
-            model: "gpt-4o-mini",
+            model: LLM_MODELS.openaiFallback,
             messages: [{ role: "user", content: prompt }],
             max_tokens: 256,
           }),
@@ -808,7 +823,7 @@ Reply with exactly 2-3 bullet points, one per line. No numbering, no intro.`;
       try {
         const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
         const msg = await anthropic.messages.create({
-          model: "claude-3-5-haiku-20241022",
+          model: LLM_MODELS.gmailParsing,
           max_tokens: 256,
           messages: [{ role: "user", content: prompt }],
         });
