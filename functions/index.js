@@ -689,7 +689,20 @@ exports.syncGmailExpenses = onCall(
   async (request) => {
     const { fid, debug } = request.data || {};
     if (!fid) throw new Error("fid required");
-    const result = await doSyncGmailExpenses(fid, { debug });
+
+    const uid = request.auth?.uid;
+    if (!uid) throw new Error("Unauthenticated");
+
+    const famSnap = await db.collection("families").doc(fid).get();
+    if (!famSnap.exists) throw new Error("Family not found");
+    const fam = famSnap.data();
+    if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
+
+    // Debug mode (returns raw email snippets) — primary owner only
+    const isPrimary = fam.primaryOwner === uid || fam.memberProfiles?.[uid]?.role === "primary";
+    const safeDebug = debug === true && isPrimary;
+
+    const result = await doSyncGmailExpenses(fid, { debug: safeDebug });
     return result;
   }
 );
@@ -1078,5 +1091,99 @@ exports.disconnectGmail = onCall(
 
     await famRef.update({ gmailSync: FieldValue.delete() });
     return { success: true };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION 6: healthAIRaw — server-side proxy for health text AI calls
+// Moves Anthropic API key off the client; validates family membership first.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.healthAIRaw = onCall(
+  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 60 },
+  async (request) => {
+    const { fid, prompt, context, isCompassionatePersona, model } = request.data || {};
+    if (!fid || !prompt) throw new Error("fid and prompt required");
+
+    const uid = request.auth?.uid;
+    if (!uid) throw new Error("Unauthenticated");
+
+    const famSnap = await db.collection("families").doc(fid).get();
+    if (!famSnap.exists) throw new Error("Family not found");
+    const fam = famSnap.data();
+    if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
+
+    const anthropicKey = ANTHROPIC_API_KEY.value();
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+    // Allowlist models — never let the client specify an arbitrary model string
+    const ALLOWED_HEALTH_MODELS = [
+      "claude-sonnet-4-20250514",
+      "claude-haiku-4-5-20251001",
+    ];
+    const safeModel = ALLOWED_HEALTH_MODELS.includes(model)
+      ? model
+      : "claude-sonnet-4-20250514";
+
+    const systemPrompt = isCompassionatePersona
+      ? `You are a compassionate medical information assistant helping an Indian family caregiver understand their family member's medical condition. Answer questions clearly and compassionately in simple language. ALWAYS recommend consulting the treating doctor for any treatment decisions. Be honest about uncertainty. Use simple language, avoid jargon. Answer in the same language the question is asked (Hindi or English).`
+      : `You are a medical data summarizer. Be concise, clear, and compassionate.`;
+
+    const response = await anthropic.messages.create({
+      model: safeModel,
+      max_tokens: 1000,
+      system: systemPrompt + (context ? `\n\nContext:\n${context}` : ""),
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    return { text: response.content[0].text };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION 7: healthAnalyzeImageRaw — server-side proxy for health vision calls
+// Moves Anthropic API key off the client; validates family membership first.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.healthAnalyzeImageRaw = onCall(
+  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 60, memory: "512MiB" },
+  async (request) => {
+    const { fid, system, prompt, base64NoPrefix, model } = request.data || {};
+    if (!fid || !base64NoPrefix) throw new Error("fid and base64NoPrefix required");
+
+    const uid = request.auth?.uid;
+    if (!uid) throw new Error("Unauthenticated");
+
+    const famSnap = await db.collection("families").doc(fid).get();
+    if (!famSnap.exists) throw new Error("Family not found");
+    const fam = famSnap.data();
+    if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
+
+    const anthropicKey = ANTHROPIC_API_KEY.value();
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+    const ALLOWED_HEALTH_MODELS = [
+      "claude-sonnet-4-20250514",
+      "claude-haiku-4-5-20251001",
+    ];
+    const safeModel = ALLOWED_HEALTH_MODELS.includes(model)
+      ? model
+      : "claude-sonnet-4-20250514";
+
+    const response = await anthropic.messages.create({
+      model: safeModel,
+      max_tokens: 2000,
+      system: system || "You are a helpful medical data assistant.",
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/jpeg", data: base64NoPrefix },
+          },
+          { type: "text", text: prompt || "Analyze this image." },
+        ],
+      }],
+    });
+
+    return { text: response.content[0].text };
   }
 );
