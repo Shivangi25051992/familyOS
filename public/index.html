@@ -3639,6 +3639,13 @@ function renderHealthTab() {
 
 function renderHealthOverview() {
   const el = document.getElementById('health-tab-overview');
+  try { _renderHealthOverviewInner(el); }
+  catch(err) {
+    console.error('renderHealthOverview error:', err);
+    if(el) el.innerHTML = `<div style="padding:20px;color:var(--red);font-size:13px">⚠️ Overview failed to load: ${err.message}<br><small>Please refresh the page.</small></div>`;
+  }
+}
+function _renderHealthOverviewInner(el) {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if(!p) return;
 
@@ -5613,6 +5620,7 @@ window.openAddVitalModal = openAddVitalModal;
 window.openVitalPhotoOCR = openVitalPhotoOCR;
 window.sendHealthChat = sendHealthChat;
 window.toggleHealthSummary = toggleHealthSummary;
+window.safeHtml = safeHtml; // expose for any inline-onclick context
 
 // SW registered above at app init
 document.addEventListener('visibilitychange',()=>{
