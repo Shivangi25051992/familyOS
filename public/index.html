@@ -431,6 +431,57 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 .urgency-routine { background: var(--green-soft); color: var(--green); }
 .urgency-watch { background: var(--orange-soft); color: var(--orange); }
 .urgency-urgent { background: var(--red-soft); color: var(--red); }
+
+/* ═══ HEALTH MODULE v2 ═══ */
+.health-alert-banner { background: var(--red-soft); border: 1px solid var(--red); border-radius: var(--r-md); padding: 12px 16px; margin-bottom: 14px; display: flex; gap: 10px; align-items: flex-start; }
+.health-alert-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.health-alert-text { font-size: 12px; color: var(--red); line-height: 1.5; font-weight: 500; }
+.health-collapsible-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.health-collapsible-body { overflow: hidden; max-height: 0; transition: max-height 0.3s ease; }
+.health-collapsible-body.open { max-height: 600px; }
+.health-summary-teaser { font-size: 12px; color: var(--text-faint); font-style: italic; margin-top: 6px; }
+.health-markers-scroll { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 8px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+.health-markers-scroll::-webkit-scrollbar { display: none; }
+.health-marker-card { min-width: 110px; background: var(--card); border: 1px solid var(--gold-border); border-radius: var(--r-md); padding: 10px 12px; flex-shrink: 0; scroll-snap-align: start; }
+.health-marker-card.flag-critical { border-color: var(--red); background: var(--red-soft); }
+.health-marker-card.flag-watch { border-color: var(--orange); background: var(--orange-soft); }
+.health-marker-card.flag-normal { border-color: var(--green); background: var(--green-soft); }
+.health-marker-name { font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.health-marker-value { font-size: 17px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--text); }
+.health-marker-unit { font-size: 9px; color: var(--text-faint); }
+.health-marker-trend { font-size: 12px; margin-top: 3px; }
+.trend-up { color: var(--red); }
+.trend-dn { color: var(--green); }
+.trend-eq { color: var(--text-faint); }
+.med-slot-section { margin-bottom: 14px; }
+.med-slot-header { font-size: 10px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.med-slot-item { background: var(--card); border: 1px solid var(--gold-border); border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+.med-slot-item.taken { opacity: 0.55; border-color: var(--green); }
+.med-slot-info { flex: 1; min-width: 0; }
+.med-slot-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.med-slot-dose { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+.btn-mark-taken { font-size: 10px; padding: 5px 11px; border-radius: 99px; background: var(--gold); color: #000; font-weight: 700; border: none; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
+.btn-mark-taken.done { background: var(--green-soft); color: var(--green); border: 1px solid var(--green); }
+.health-vitals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.health-vital-chip { background: var(--card); border: 1px solid var(--gold-border); border-radius: var(--r-md); padding: 12px 10px; text-align: center; }
+.health-vital-chip-val { font-size: 20px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--gold); }
+.health-vital-chip-lbl { font-size: 9px; color: var(--text-faint); text-transform: uppercase; margin-top: 3px; letter-spacing: 0.5px; }
+.health-vital-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--gold-border); font-size: 12px; }
+.health-chat-wrap { display: flex; flex-direction: column; height: calc(100vh - 290px); min-height: 360px; }
+.health-chat-messages { flex: 1; overflow-y: auto; padding: 4px 0 8px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+.chat-bubble-row { display: flex; flex-direction: column; }
+.chat-bubble-row.user-row { align-items: flex-end; }
+.chat-bubble-row.ai-row { align-items: flex-start; }
+.chat-bubble { max-width: 86%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.6; word-break: break-word; }
+.chat-bubble.user { background: var(--gold); color: #000; border-bottom-right-radius: 4px; }
+.chat-bubble.ai { background: var(--card); border: 1px solid var(--gold-border); color: var(--text); border-bottom-left-radius: 4px; }
+.chat-bubble-time { font-size: 9px; color: var(--text-faint); margin-top: 3px; padding: 0 4px; }
+.chat-typing-dot { display: inline-flex; gap: 4px; align-items: center; }
+.chat-typing-dot span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); animation: pulse 1.2s infinite; }
+.chat-typing-dot span:nth-child(2) { animation-delay: 0.2s; }
+.chat-typing-dot span:nth-child(3) { animation-delay: 0.4s; }
+.chat-input-bar { display: flex; gap: 8px; padding: 10px 0 4px; border-top: 1px solid var(--gold-border); align-items: flex-end; }
+.chat-input-bar textarea { flex: 1; resize: none; height: 42px; max-height: 100px; background: var(--surface); border: 1px solid var(--gold-border); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text); font-family: inherit; outline: none; }
 </style>
 </head>
 <body>
@@ -992,19 +1043,23 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
           <div style="font-size:12px;color:var(--text-dim)" id="health-patient-diagnosis">Diagnosis</div>
         </div>
       </div>
-      <div class="chip-row" id="health-tabs">
-        <button class="chip on" onclick="switchHealthTab('overview',this)">Overview</button>
-        <button class="chip" onclick="switchHealthTab('reports',this)">Reports</button>
-        <button class="chip" onclick="switchHealthTab('meds',this)">Meds</button>
-        <button class="chip" onclick="switchHealthTab('visits',this)">Visits</button>
-        <button class="chip" onclick="switchHealthTab('bills',this)">Bills</button>
+      <div class="chip-row" id="health-tabs" style="overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none">
+        <button class="chip on" onclick="switchHealthTab('overview',this)" style="white-space:nowrap">Overview</button>
+        <button class="chip" onclick="switchHealthTab('vitals',this)" style="white-space:nowrap">Vitals</button>
+        <button class="chip" onclick="switchHealthTab('meds',this)" style="white-space:nowrap">Meds</button>
+        <button class="chip" onclick="switchHealthTab('reports',this)" style="white-space:nowrap">Reports</button>
+        <button class="chip" onclick="switchHealthTab('visits',this)" style="white-space:nowrap">Visits</button>
+        <button class="chip" onclick="switchHealthTab('bills',this)" style="white-space:nowrap">Bills</button>
+        <button class="chip" onclick="switchHealthTab('chat',this)" style="white-space:nowrap">Ask AI</button>
       </div>
-      
+
       <div id="health-tab-overview" class="health-tab-pane"></div>
+      <div id="health-tab-vitals" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-reports" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-meds" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-visits" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-bills" class="health-tab-pane" style="display:none"></div>
+      <div id="health-tab-chat" class="health-tab-pane" style="display:none"></div>
     </div>
   </div>
 
@@ -1457,6 +1512,37 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
        </div>
        <button class="btn-primary" onclick="saveHealthBill()">Confirm & Save</button>
     </div>
+  </div>
+</div>
+
+<!-- ADD VITAL -->
+<div class="modal-overlay" id="modal-health-vital">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Log Vitals <button class="modal-close" onclick="closeModal('modal-health-vital')">✕</button></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="hv2-date" type="date"></div>
+      <div class="form-group"><label class="form-label">Recorded At</label>
+        <select class="form-select" id="hv2-location"><option value="home">Home</option><option value="hospital">Hospital</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">BP Systolic</label><input class="form-input" id="hv2-bp-s" type="number" placeholder="120"></div>
+      <div class="form-group"><label class="form-label">BP Diastolic</label><input class="form-input" id="hv2-bp-d" type="number" placeholder="80"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Pulse (bpm)</label><input class="form-input" id="hv2-pulse" type="number" placeholder="72"></div>
+      <div class="form-group"><label class="form-label">SpO2 (%)</label><input class="form-input" id="hv2-spo2" type="number" placeholder="98"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Temp (°F)</label><input class="form-input" id="hv2-temp" type="number" step="0.1" placeholder="98.6"></div>
+      <div class="form-group"><label class="form-label">Weight (kg)</label><input class="form-input" id="hv2-weight" type="number" step="0.1" placeholder="65"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Blood Sugar (mg/dL)</label><input class="form-input" id="hv2-sugar" type="number" placeholder="100"></div>
+      <div class="form-group"><label class="form-label">Time</label><input class="form-input" id="hv2-time" type="time"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="hv2-notes" placeholder="e.g. fasting, post-meal, after walk"></div>
+    <button class="btn-primary" onclick="saveVital()">Save Vitals</button>
   </div>
 </div>
 
@@ -3497,7 +3583,7 @@ function showHealthProfiles() {
 }
 
 let activePatientUnsubs = [];
-let activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [] };
+let activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [] };
 
 async function openPatientDashboard(id) {
   activeHealthProfileId = id;
@@ -3516,22 +3602,25 @@ async function openPatientDashboard(id) {
 function subscribeActivePatient() {
   if(!activeHealthProfileId || !FID) return;
   if(activePatientUnsubs.length) { activePatientUnsubs.forEach(u => u()); activePatientUnsubs = []; }
+  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [] };
 
   const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+  const todayS = todayStr();
   const u1 = onSnapshot(query(collection(db, `${base}/reports`), orderBy('date', 'desc')), s => { activePatientData.reports = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
   const u2 = onSnapshot(query(collection(db, `${base}/medications`), orderBy('addedAt', 'desc')), s => { activePatientData.medications = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
   const u3 = onSnapshot(query(collection(db, `${base}/visits`), orderBy('date', 'desc')), s => { activePatientData.visits = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
   const u4 = onSnapshot(query(collection(db, `${base}/bills`), orderBy('date', 'desc')), s => { activePatientData.bills = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
   const u5 = onSnapshot(query(collection(db, `${base}/timeline`), orderBy('date', 'desc')), s => { activePatientData.timeline = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
-  
-  activePatientUnsubs = [u1, u2, u3, u4, u5];
+  const u6 = onSnapshot(query(collection(db, `${base}/vitals`), orderBy('recordedAt', 'desc')), s => { activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
+  const u7 = onSnapshot(query(collection(db, `${base}/doseLogs`), where('date', '==', todayS)), s => { activePatientData.doseLogs = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
+
+  activePatientUnsubs = [u1, u2, u3, u4, u5, u6, u7];
 }
 
 function switchHealthTab(tab, btn) {
   activeHealthTab = tab;
   document.querySelectorAll('#health-tabs .chip').forEach(c => c.classList.remove('on'));
   btn.classList.add('on');
-  
   document.querySelectorAll('.health-tab-pane').forEach(p => p.style.display = 'none');
   document.getElementById(`health-tab-${tab}`).style.display = 'block';
   renderHealthTab();
@@ -3540,76 +3629,159 @@ function switchHealthTab(tab, btn) {
 function renderHealthTab() {
   if(!activeHealthProfileId) return;
   if(activeHealthTab === 'overview') renderHealthOverview();
+  else if(activeHealthTab === 'vitals') renderHealthVitals();
   else if(activeHealthTab === 'reports') renderHealthReports();
   else if(activeHealthTab === 'meds') renderHealthMeds();
   else if(activeHealthTab === 'visits') renderHealthVisits();
   else if(activeHealthTab === 'bills') renderHealthBills();
+  else if(activeHealthTab === 'chat') renderHealthChat();
 }
 
-async function renderHealthOverview() {
+function renderHealthOverview() {
   const el = document.getElementById('health-tab-overview');
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if(!p) return;
 
-  const nextVisit = activePatientData.visits.find(v => v.nextVisit && v.nextVisit >= todayStr())?.nextVisit || 'None';
+  // Critical alert from most recent urgent report
+  const urgentReport = activePatientData.reports.find(r => r.urgency === 'urgent');
+  const alertHtml = urgentReport ? `
+    <div class="health-alert-banner">
+      <div class="health-alert-icon">🚨</div>
+      <div class="health-alert-text"><strong>Attention needed:</strong> ${safeHtml(urgentReport.title)} — ${safeHtml(urgentReport.aiSummary?.slice(0,120))}...</div>
+    </div>` : '';
+
+  // AI Summary — collapsible
+  const summary = p.aiSummary || '';
+  const teaser = summary ? summary.slice(0, 90) + (summary.length > 90 ? '…' : '') : 'Tap refresh to generate status summary.';
+  const summaryHtml = `
+    <div class="health-card" style="margin-bottom:12px">
+      <div class="health-collapsible-header" onclick="toggleHealthSummary()">
+        <div class="health-card-title">✨ AI Case Summary</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn-sm" onclick="event.stopPropagation();generateAISummary()"><span id="ai-sum-btn-icon">🔄</span></button>
+          <span id="health-summary-chevron" style="font-size:16px;color:var(--text-faint)">›</span>
+        </div>
+      </div>
+      <div class="health-summary-teaser" id="health-summary-teaser">${safeHtml(teaser)}</div>
+      <div class="health-collapsible-body" id="health-summary-body">
+        <div style="font-size:13px;line-height:1.6;color:var(--text-dim);padding-top:10px" id="health-ai-summary-text">${safeHtml(summary || 'No summary yet.')}</div>
+      </div>
+    </div>`;
+
+  // Key markers from all reports
+  const markers = getKeyMarkers(activePatientData.reports);
+  const markersHtml = markers.length ? `
+    <div class="health-card" style="margin-bottom:12px">
+      <div class="health-card-title" style="margin-bottom:10px">🧬 Key Markers</div>
+      <div class="health-markers-scroll">
+        ${markers.map(m => `
+          <div class="health-marker-card flag-${safeHtml(m.flag)}">
+            <div class="health-marker-name">${safeHtml(m.name)}</div>
+            <div class="health-marker-value">${safeHtml(m.value)}</div>
+            <div class="health-marker-unit">${safeHtml(m.unit || '')}</div>
+            <div class="health-marker-trend ${m.trend === 'up' ? 'trend-up' : m.trend === 'down' ? 'trend-dn' : 'trend-eq'}">${m.trend === 'up' ? '↑' : m.trend === 'down' ? '↓' : '—'}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>` : '';
+
+  // Today's medication schedule
+  const activeMeds = activePatientData.medications.filter(m => m.active !== false);
+  const schedule = buildMedSchedule(activeMeds);
+  const slots = [
+    { key: 'morning', icon: '🌅', label: 'Morning' },
+    { key: 'afternoon', icon: '☀️', label: 'Afternoon' },
+    { key: 'evening', icon: '🌆', label: 'Evening' },
+    { key: 'night', icon: '🌙', label: 'Night' }
+  ];
+  const todayDoses = activePatientData.doseLogs;
+  const medScheduleHtml = activeMeds.length ? `
+    <div class="health-card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="health-card-title">💊 Today's Medicines</div>
+        <span style="font-size:10px;color:var(--text-faint)">${new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>
+      </div>
+      ${slots.map(slot => {
+        const meds = schedule[slot.key] || [];
+        if(!meds.length) return '';
+        return `<div class="med-slot-section">
+          <div class="med-slot-header">${slot.icon} ${slot.label}</div>
+          ${meds.map(m => {
+            const doseLog = todayDoses.find(d => d.medicationId === m.id && d.slot === slot.key);
+            const taken = !!doseLog?.taken;
+            return `<div class="med-slot-item ${taken ? 'taken' : ''}">
+              <div class="med-slot-info">
+                <div class="med-slot-name">${safeHtml(m.name)}</div>
+                <div class="med-slot-dose">${safeHtml(m.dose)}${m.notes ? ' · ' + safeHtml(m.notes.slice(0,40)) : ''}</div>
+              </div>
+              <button class="btn-mark-taken ${taken ? 'done' : ''}" onclick="logDose('${m.id}','${safeHtml(m.name)}','${slot.key}',${taken})" ${taken ? 'disabled' : ''}>${taken ? '✓ Done' : 'Mark Taken'}</button>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  // Latest vitals
+  const latestVital = activePatientData.vitals[0];
+  const vitalsHtml = latestVital ? `
+    <div class="health-card" style="margin-bottom:12px" onclick="switchHealthTab('vitals',document.querySelectorAll('#health-tabs .chip')[1])">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="health-card-title">📊 Latest Vitals</div>
+        <span style="font-size:10px;color:var(--text-faint)">${formatReportDate(latestVital.date)} · ${safeHtml(latestVital.recordedAt||'home')}</span>
+      </div>
+      <div class="health-vitals-grid" style="grid-template-columns:repeat(3,1fr)">
+        ${latestVital.bp_systolic ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(latestVital.bp_systolic)}/${safeHtml(latestVital.bp_diastolic)}</div><div class="health-vital-chip-lbl">BP</div></div>` : ''}
+        ${latestVital.pulse ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latestVital.pulse))}</div><div class="health-vital-chip-lbl">Pulse</div></div>` : ''}
+        ${latestVital.spo2 ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latestVital.spo2))}%</div><div class="health-vital-chip-lbl">SpO2</div></div>` : ''}
+      </div>
+    </div>` : '';
+
+  // Slim stats + timeline
+  const nextVisit = activePatientData.visits.find(v => v.nextVisit && v.nextVisit >= todayStr())?.nextVisit;
   const totalBills = activePatientData.bills.reduce((sum, b) => sum + (b.amount || 0), 0);
 
   el.innerHTML = `
-    <div class="health-card" id="health-ai-summary-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div class="health-card-title">✨ AI Case Summary</div>
-        <button class="btn-sm" onclick="generateAISummary()"><span id="ai-sum-btn-icon">🔄</span></button>
-      </div>
-      <div id="health-ai-summary-text" style="font-size:13px;line-height:1.6;color:var(--text-dim)">
-        ${safeHtml(p.aiSummary || 'Tap refresh to generate status summary...')}
-      </div>
-    </div>
-
-    <div class="health-stats-row">
+    ${alertHtml}
+    ${summaryHtml}
+    ${markersHtml}
+    ${medScheduleHtml}
+    ${vitalsHtml}
+    <div class="health-stats-row" style="margin-bottom:12px">
       <div class="health-stat-card"><div class="health-stat-val">${activePatientData.reports.length}</div><div class="health-stat-lbl">Reports</div></div>
-      <div class="health-stat-card"><div class="health-stat-val">${activePatientData.medications.filter(m=>m.active!==false).length}</div><div class="health-stat-lbl">Meds</div></div>
-      <div class="health-stat-card"><div class="health-stat-val" style="font-size:12px">${nextVisit !== 'None' ? formatReportDate(nextVisit) : 'None'}</div><div class="health-stat-lbl">Next Visit</div></div>
-      <div class="health-stat-card"><div class="health-stat-val">${fmt(totalBills)}</div><div class="health-stat-lbl">Total Bills</div></div>
+      <div class="health-stat-card"><div class="health-stat-val">${activeMeds.length}</div><div class="health-stat-lbl">Meds</div></div>
+      <div class="health-stat-card"><div class="health-stat-val" style="font-size:11px">${nextVisit ? formatReportDate(nextVisit) : 'None'}</div><div class="health-stat-lbl">Next Visit</div></div>
+      <div class="health-stat-card"><div class="health-stat-val">${fmt(totalBills)}</div><div class="health-stat-lbl">Bills</div></div>
     </div>
 
-    <div class="health-ask-box">
-      <div class="health-card-title">Ask AI</div>
-      <div style="font-size:11px;color:var(--text-faint);margin-bottom:10px">Ask anything about ${safeHtml(p.name)}'s condition...</div>
-      <div id="health-qa-history">
-        ${(p.qaHistory || []).slice(-5).map(qa => `
-          <div class="health-qa-item">
-            <div class="health-q">Q: ${safeHtml(qa.q)}</div>
-            <div class="health-a">${safeHtml(qa.a)}</div>
-          </div>
-        `).join('')}
-      </div>
-      <div class="health-ask-input-wrap">
-        <input class="health-ask-input" id="health-ask-input" placeholder="e.g. What does the hemoglobin trend show?">
-        <button class="btn-sm fill" onclick="startVoiceInput('health-ask-input')" style="border-radius:50%;width:36px;height:36px;padding:0">🎤</button>
-        <button class="btn-sm fill" onclick="handleHealthAsk()" id="btn-health-ask">Submit</button>
-      </div>
-    </div>
-
-    <div class="health-card">
+    <div class="health-card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="health-card-title">Recent Timeline</div>
-        <button class="btn-sm" onclick="switchHealthTab('visits', document.querySelectorAll('#health-tabs .chip')[3])">View Visits</button>
+        <div class="health-card-title">🕐 Recent Timeline</div>
+        <button class="btn-sm" onclick="switchHealthTab('visits',document.querySelectorAll('#health-tabs .chip')[4])">View All</button>
       </div>
-      <div id="health-recent-timeline">
-        ${activePatientData.timeline.slice(0, 5).map(e => `
-          <div class="health-timeline-item">
-            <div class="health-timeline-icon">${e.type==='report'?'📄':e.type==='visit'?'🏥':e.type==='medication'?'💊':'📝'}</div>
-            <div class="health-timeline-content">
-              <div class="health-timeline-title">${safeHtml(e.title)}</div>
-              <div class="health-timeline-date">${formatReportDate(e.date)}</div>
-            </div>
+      ${activePatientData.timeline.slice(0, 4).map(e => `
+        <div class="health-timeline-item">
+          <div class="health-timeline-icon">${e.type==='report'?'📄':e.type==='visit'?'🏥':e.type==='medication'?'💊':'📝'}</div>
+          <div class="health-timeline-content">
+            <div class="health-timeline-title">${safeHtml(e.title)}</div>
+            <div class="health-timeline-date">${formatReportDate(e.date)}</div>
           </div>
-        `).join('')}
-      </div>
+        </div>
+      `).join('') || '<div style="font-size:12px;color:var(--text-faint)">No events yet.</div>'}
     </div>
 
-    <button class="btn-primary" onclick="generateDoctorSummary()" style="margin-bottom:20px">📋 Prepare Doctor Summary</button>
+    <button class="btn-primary" onclick="generateDoctorSummary()" style="margin-bottom:20px;width:100%">📋 Generate Doctor Summary</button>
   `;
+}
+
+function toggleHealthSummary() {
+  const body = document.getElementById('health-summary-body');
+  const chevron = document.getElementById('health-summary-chevron');
+  const teaser = document.getElementById('health-summary-teaser');
+  if(!body) return;
+  const isOpen = body.classList.contains('open');
+  body.classList.toggle('open', !isOpen);
+  chevron.textContent = isOpen ? '›' : '⌃';
+  teaser.style.display = isOpen ? '' : 'none';
 }
 
 async function renderHealthReports() {
@@ -3672,32 +3844,71 @@ function renderHealthMeds() {
   const el = document.getElementById('health-tab-meds');
   const active = activePatientData.medications.filter(m => m.active !== false);
   const inactive = activePatientData.medications.filter(m => m.active === false);
+  const schedule = buildMedSchedule(active);
+  const todayDoses = activePatientData.doseLogs;
+  const slots = [
+    { key: 'morning', icon: '🌅', label: 'Morning' },
+    { key: 'afternoon', icon: '☀️', label: 'Afternoon' },
+    { key: 'evening', icon: '🌆', label: 'Evening' },
+    { key: 'night', icon: '🌙', label: 'Night' }
+  ];
+
+  const scheduleHtml = active.length ? `
+    <div class="health-card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="health-card-title">Today's Schedule</div>
+        <span style="font-size:10px;color:var(--text-faint)">${new Date().toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}</span>
+      </div>
+      ${slots.map(slot => {
+        const meds = schedule[slot.key] || [];
+        if(!meds.length) return '';
+        return `<div class="med-slot-section">
+          <div class="med-slot-header">${slot.icon} ${slot.label}</div>
+          ${meds.map(m => {
+            const doseLog = todayDoses.find(d => d.medicationId === m.id && d.slot === slot.key);
+            const taken = !!doseLog?.taken;
+            return `<div class="med-slot-item ${taken ? 'taken' : ''}">
+              <div class="med-slot-info">
+                <div class="med-slot-name">${safeHtml(m.name)}</div>
+                <div class="med-slot-dose">${safeHtml(m.dose)}</div>
+              </div>
+              <button class="btn-mark-taken ${taken ? 'done' : ''}" onclick="logDose('${m.id}','${safeHtml(m.name)}','${slot.key}',${taken})" ${taken ? 'disabled' : ''}>${taken ? '✓ Done' : 'Mark Taken'}</button>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }).join('') || '<div style="font-size:12px;color:var(--text-faint)">No schedule generated yet — add frequency when adding a medication.</div>'}
+    </div>` : '';
 
   el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div class="sec-title" style="font-size:18px">Medications</div>
       <button class="btn-sm fill" onclick="openModal('modal-health-med')">+ Add Med</button>
     </div>
-    
-    <div class="health-card-title" style="font-size:12px;color:var(--text-faint);text-transform:uppercase;margin-bottom:10px">Active</div>
-    ${active.map(m => `
-      <div class="health-card">
+
+    ${scheduleHtml}
+
+    <div class="health-card-title" style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Active Medications</div>
+    ${active.length ? active.map(m => {
+      const slots = buildMedSchedule([m]);
+      const slotLabels = Object.entries(slots).filter(([,meds])=>meds.length).map(([k])=>k).join(', ');
+      return `<div class="health-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div>
+          <div style="flex:1;min-width:0">
             <div class="health-card-title" style="color:var(--gold)">${safeHtml(m.name)}</div>
-            <div style="font-size:14px;font-weight:600">${safeHtml(m.dose)} · ${safeHtml(m.frequency)}</div>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:4px">${safeHtml(m.timing)}</div>
+            <div style="font-size:13px;font-weight:600;margin-top:2px">${safeHtml(m.dose)} · ${safeHtml(m.frequency)}</div>
+            ${m.timing ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${safeHtml(m.timing)}</div>` : ''}
+            ${slotLabels ? `<div style="font-size:10px;color:var(--gold);margin-top:4px;font-family:'DM Mono',monospace">${slotLabels}</div>` : ''}
           </div>
-          <button class="btn-sm" onclick="toggleMedActive('${m.id}', false)">Stop</button>
+          <button class="btn-sm" onclick="toggleMedActive('${m.id}', false)" style="margin-left:8px;flex-shrink:0">Stop</button>
         </div>
         ${m.notes ? `<div style="font-size:11px;color:var(--text-faint);margin-top:8px;padding-top:8px;border-top:1px solid var(--gold-border)">${safeHtml(m.notes)}</div>` : ''}
-      </div>
-    `).join('')}
+      </div>`;
+    }).join('') : '<div style="font-size:12px;color:var(--text-faint);padding:16px 0">No active medications.</div>'}
 
     ${inactive.length ? `
-      <div class="health-card-title" style="font-size:12px;color:var(--text-faint);text-transform:uppercase;margin:20px 0 10px">Inactive</div>
+      <div class="health-card-title" style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px">Stopped / Inactive</div>
       ${inactive.map(m => `
-        <div class="health-card" style="opacity:0.6">
+        <div class="health-card" style="opacity:0.55">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
               <div class="health-card-title">${safeHtml(m.name)}</div>
@@ -3709,7 +3920,7 @@ function renderHealthMeds() {
       `).join('')}
     ` : ''}
 
-    <div style="padding:20px;background:var(--surface);border-radius:var(--r-md);font-size:11px;color:var(--text-faint);line-height:1.6;margin-top:20px">
+    <div style="padding:16px;background:var(--surface);border-radius:var(--r-md);font-size:11px;color:var(--text-faint);line-height:1.6;margin-top:16px">
       ⚠️ Always confirm medication interactions with your doctor. This app helps you track — not prescribe.
     </div>
   `;
@@ -3775,6 +3986,174 @@ function renderHealthBills() {
   `;
 }
 
+// ══ VITALS TAB ══
+function renderHealthVitals() {
+  const el = document.getElementById('health-tab-vitals');
+  const vitals = activePatientData.vitals;
+  const latest = vitals[0];
+
+  const latestHtml = latest ? `
+    <div class="health-card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="health-card-title">📊 Latest Reading</div>
+        <span style="font-size:10px;color:var(--text-faint)">${formatReportDate(latest.date)} · ${safeHtml(latest.recordedAt||'home')}</span>
+      </div>
+      <div class="health-vitals-grid">
+        ${latest.bp_systolic ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latest.bp_systolic))}/${safeHtml(String(latest.bp_diastolic||'?'))}</div><div class="health-vital-chip-lbl">BP (mmHg)</div></div>` : ''}
+        ${latest.pulse ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latest.pulse))}</div><div class="health-vital-chip-lbl">Pulse (bpm)</div></div>` : ''}
+        ${latest.spo2 ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latest.spo2))}%</div><div class="health-vital-chip-lbl">SpO2</div></div>` : ''}
+        ${latest.temperature ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latest.temperature))}°F</div><div class="health-vital-chip-lbl">Temp</div></div>` : ''}
+        ${latest.weight ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latest.weight))} kg</div><div class="health-vital-chip-lbl">Weight</div></div>` : ''}
+        ${latest.bloodSugar ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(latest.bloodSugar))}</div><div class="health-vital-chip-lbl">Sugar (mg/dL)</div></div>` : ''}
+      </div>
+      ${latest.notes ? `<div style="font-size:11px;color:var(--text-faint);margin-top:6px">${safeHtml(latest.notes)}</div>` : ''}
+    </div>` : `<div class="health-card" style="text-align:center;padding:24px;margin-bottom:14px;color:var(--text-faint);font-size:13px">No vitals recorded yet.<br>Add your first reading below.</div>`;
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="sec-title" style="font-size:18px">Vitals</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-sm" onclick="openVitalPhotoOCR()">📷 Scan</button>
+        <button class="btn-sm fill" onclick="openAddVitalModal()">+ Add</button>
+      </div>
+    </div>
+
+    ${latestHtml}
+
+    ${vitals.length > 1 ? `
+      <div class="health-card-title" style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">History</div>
+      ${vitals.slice(1).map(v => `
+        <div class="health-vital-history-item">
+          <div>
+            <div style="font-size:12px;font-weight:600">${formatReportDate(v.date)}${v.time ? ' · ' + safeHtml(v.time) : ''}</div>
+            <div style="font-size:10px;color:var(--text-faint)">${safeHtml(v.recordedAt||'home')}</div>
+          </div>
+          <div style="text-align:right;font-size:12px;font-family:'DM Mono',monospace">
+            ${v.bp_systolic ? `<div>BP ${safeHtml(String(v.bp_systolic))}/${safeHtml(String(v.bp_diastolic||'?'))}</div>` : ''}
+            ${v.pulse ? `<div>Pulse ${safeHtml(String(v.pulse))}</div>` : ''}
+            ${v.spo2 ? `<div>SpO2 ${safeHtml(String(v.spo2))}%</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    ` : ''}
+  `;
+}
+
+function openAddVitalModal() {
+  const d = document.getElementById('hv2-date');
+  if(d) d.value = todayStr();
+  const t = document.getElementById('hv2-time');
+  if(t) t.value = new Date().toTimeString().slice(0,5);
+  openModal('modal-health-vital');
+}
+
+async function openVitalPhotoOCR() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*,application/pdf'; input.capture = 'environment';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if(!file) return;
+    showToast('Parsing vitals from image…');
+    try {
+      const result = await parseVitalsFromImage(file);
+      if(!result) { showToast('Could not parse vitals'); return; }
+      if(result.bp_systolic) document.getElementById('hv2-bp-s').value = result.bp_systolic;
+      if(result.bp_diastolic) document.getElementById('hv2-bp-d').value = result.bp_diastolic;
+      if(result.pulse) document.getElementById('hv2-pulse').value = result.pulse;
+      if(result.spo2) document.getElementById('hv2-spo2').value = result.spo2;
+      if(result.temperature) document.getElementById('hv2-temp').value = result.temperature;
+      if(result.weight) document.getElementById('hv2-weight').value = result.weight;
+      if(result.bloodSugar) document.getElementById('hv2-sugar').value = result.bloodSugar;
+      openAddVitalModal();
+      showToast('Vitals pre-filled — please verify');
+    } catch(e) { console.error(e); showToast('Parsing failed'); }
+  };
+  input.click();
+}
+
+// ══ CHAT TAB ══
+let _healthChatHistory = [];
+
+function renderHealthChat() {
+  const el = document.getElementById('health-tab-chat');
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if(!p) return;
+
+  _healthChatHistory = p.chatHistory || [];
+
+  el.innerHTML = `
+    <div class="health-chat-wrap">
+      <div class="health-chat-messages" id="health-chat-messages">
+        ${_healthChatHistory.length === 0 ? `
+          <div class="chat-bubble ai"><strong>Hi!</strong> I'm your AI health assistant for ${safeHtml(p.name)}. Ask me anything about the diagnosis, medications, test results, or care plan.</div>
+        ` : _healthChatHistory.map(msg => `
+          <div class="chat-bubble-row ${msg.role === 'user' ? 'user-row' : 'ai-row'}">
+            <div class="chat-bubble ${msg.role === 'user' ? 'user' : 'ai'}">${safeHtml(msg.text)}</div>
+            <div class="chat-bubble-time">${msg.t ? new Date(msg.t).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="chat-input-bar">
+        <textarea id="health-chat-input" placeholder="Ask about medications, vitals, report findings…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHealthChat()}"></textarea>
+        <button class="btn-sm fill" onclick="startVoiceInput('health-chat-input')" style="border-radius:50%;width:40px;height:40px;padding:0;flex-shrink:0">🎤</button>
+        <button class="btn-sm fill" onclick="sendHealthChat()" id="btn-chat-send" style="flex-shrink:0">Send</button>
+      </div>
+    </div>
+  `;
+
+  // Scroll to bottom
+  requestAnimationFrame(() => {
+    const msgs = document.getElementById('health-chat-messages');
+    if(msgs) msgs.scrollTop = msgs.scrollHeight;
+  });
+}
+
+async function sendHealthChat() {
+  const input = document.getElementById('health-chat-input');
+  const btn = document.getElementById('btn-chat-send');
+  const q = input?.value?.trim();
+  if(!q || !activeHealthProfileId) return;
+
+  input.value = '';
+  btn.disabled = true; btn.textContent = '…';
+
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  _healthChatHistory.push({ role: 'user', text: q, t: Date.now() });
+  renderHealthChat();
+
+  // Show typing indicator
+  const msgs = document.getElementById('health-chat-messages');
+  if(msgs) {
+    const typing = document.createElement('div');
+    typing.id = 'chat-typing-indicator';
+    typing.className = 'chat-bubble-row ai-row';
+    typing.innerHTML = `<div class="chat-bubble ai"><div class="chat-typing-dot"><span></span><span></span><span></span></div></div>`;
+    msgs.appendChild(typing);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  try {
+    const context = `
+Patient: ${p.name}, ${p.relation}, ${p.diagnosis}
+Active meds: ${activePatientData.medications.filter(m=>m.active!==false).map(m=>`${m.name} ${m.dose} ${m.frequency}`).join('; ')}
+Recent reports: ${activePatientData.reports.slice(0,3).map(r=>`[${r.date}] ${r.title}: ${r.aiSummary}`).join(' | ')}
+Recent visits: ${activePatientData.visits.slice(0,2).map(v=>`[${v.date}] ${v.hospital}: ${v.notes}`).join(' | ')}
+    `.trim();
+    const answer = await callClaudeHealth(q, context, true, LLM_MODELS.medicalQA);
+    _healthChatHistory.push({ role: 'ai', text: answer, t: Date.now() });
+
+    // Persist last 30 messages
+    const toSave = _healthChatHistory.slice(-30);
+    await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { chatHistory: toSave });
+  } catch(e) {
+    console.error(e);
+    _healthChatHistory.push({ role: 'ai', text: 'Sorry, something went wrong. Please try again.', t: Date.now() });
+  }
+
+  btn.disabled = false; btn.textContent = 'Send';
+  renderHealthChat();
+}
+
 // ══ AI FUNCTIONS ══
 async function generateAISummary() {
   if(!activeHealthProfileId) return;
@@ -3784,7 +4163,7 @@ async function generateAISummary() {
   const visits = activePatientData.visits.slice(0, 1);
 
   const icon = document.getElementById('ai-sum-btn-icon');
-  icon.classList.add('spin');
+  icon?.classList.add('spin');
 
   const context = `Diagnosis: ${p.diagnosis}. 
     Recent reports: ${reports.map(r => r.aiSummary).join(' ')}. 
@@ -3798,7 +4177,7 @@ async function generateAISummary() {
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummary: summary, updatedAt: serverTimestamp() });
     document.getElementById('health-ai-summary-text').textContent = summary;
   } catch(e) { console.error(e); showToast('AI error'); }
-  icon.classList.remove('spin');
+  icon?.classList.remove('spin');
 }
 
 async function handleHealthAsk() {
@@ -3844,6 +4223,129 @@ async function callClaudeHealth(prompt, context, isCompassionatePersona = false,
   const fn = httpsCallable(functions, 'healthAIRaw');
   const result = await fn({ fid: FID, prompt, context: context || '', isCompassionatePersona: !!isCompassionatePersona, model });
   return result.data.text;
+}
+
+// ══ HEALTH HELPERS ══
+
+// Extract key cancer + liver + blood markers from all reports' keyFindings
+function getKeyMarkers(reports) {
+  const TARGET_MARKERS = [
+    'ca 19-9','ca19-9','afp','cea','bilirubin','alt','sgpt','ast','sgot',
+    'alkaline phosphatase','alp','hemoglobin','haemoglobin','wbc','platelets',
+    'creatinine','albumin','ca 125','psa'
+  ];
+  const seen = {};
+  // Go through reports newest first
+  for(const r of reports) {
+    for(const f of (r.keyFindings || [])) {
+      const key = (f.name || '').toLowerCase().trim();
+      const matchKey = TARGET_MARKERS.find(t => key.includes(t));
+      if(matchKey && !seen[matchKey]) {
+        // Compute trend by finding same marker in older report
+        let trend = 'eq';
+        const olderReport = reports.find(r2 => r2 !== r && r2.keyFindings?.some(f2 => f2.name?.toLowerCase().includes(matchKey)));
+        if(olderReport) {
+          const older = olderReport.keyFindings.find(f2 => f2.name?.toLowerCase().includes(matchKey));
+          const cur = parseFloat(String(f.value).replace(/[^\d.]/g,''));
+          const old = parseFloat(String(older.value).replace(/[^\d.]/g,''));
+          if(!isNaN(cur) && !isNaN(old)) trend = cur > old ? 'up' : cur < old ? 'down' : 'eq';
+        }
+        seen[matchKey] = { name: f.name, value: f.value, unit: f.unit || '', flag: f.flag || 'normal', trend };
+      }
+    }
+  }
+  return Object.values(seen);
+}
+
+// Map medication frequency text to time slots
+function buildMedSchedule(meds) {
+  const schedule = { morning: [], afternoon: [], evening: [], night: [] };
+  for(const m of meds) {
+    const freq = (m.frequency || '').toLowerCase();
+    if(/once|od|once daily|1x|q24/.test(freq)) {
+      schedule.morning.push(m);
+    } else if(/twice|bd|bid|2x|q12|two times/.test(freq)) {
+      schedule.morning.push(m); schedule.night.push(m);
+    } else if(/three|tid|tds|3x|q8/.test(freq)) {
+      schedule.morning.push(m); schedule.afternoon.push(m); schedule.night.push(m);
+    } else if(/four|qid|4x|q6/.test(freq)) {
+      schedule.morning.push(m); schedule.afternoon.push(m); schedule.evening.push(m); schedule.night.push(m);
+    } else if(/morning/.test(freq)) {
+      schedule.morning.push(m);
+    } else if(/night|bedtime|hs/.test(freq)) {
+      schedule.night.push(m);
+    } else if(/evening/.test(freq)) {
+      schedule.evening.push(m);
+    } else {
+      // Default: morning
+      schedule.morning.push(m);
+    }
+  }
+  return schedule;
+}
+
+// Log a dose taken for today
+async function logDose(medicationId, medicationName, slot, alreadyTaken) {
+  if(alreadyTaken || !activeHealthProfileId || !FID) return;
+  try {
+    const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+    await addDoc(collection(db, `${base}/doseLogs`), {
+      date: todayStr(),
+      medicationId,
+      medicationName,
+      slot,
+      taken: true,
+      takenAt: serverTimestamp()
+    });
+    showToast('Dose logged ✓');
+  } catch(e) { console.error(e); showToast('Error logging dose'); }
+}
+
+// Save a vital record
+async function saveVital() {
+  if(!activeHealthProfileId || !FID) return;
+  const getVal = id => { const v = document.getElementById(id)?.value; return v ? parseFloat(v) || v : null; };
+  const date = document.getElementById('hv2-date')?.value;
+  if(!date) { showToast('Please enter a date'); return; }
+  const entry = {
+    date,
+    time: document.getElementById('hv2-time')?.value || null,
+    recordedAt: document.getElementById('hv2-location')?.value || 'home',
+    recordedAtTimestamp: serverTimestamp()
+  };
+  const fields = [
+    ['bp_systolic','hv2-bp-s'],['bp_diastolic','hv2-bp-d'],
+    ['pulse','hv2-pulse'],['spo2','hv2-spo2'],
+    ['temperature','hv2-temp'],['weight','hv2-weight'],
+    ['bloodSugar','hv2-sugar']
+  ];
+  fields.forEach(([key, id]) => { const v = getVal(id); if(v !== null) entry[key] = v; });
+  entry.notes = document.getElementById('hv2-notes')?.value?.trim() || '';
+  try {
+    const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+    await addDoc(collection(db, `${base}/vitals`), entry);
+    showToast('Vitals saved ✓');
+    closeModal('modal-health-vital');
+    // Reset fields
+    ['hv2-bp-s','hv2-bp-d','hv2-pulse','hv2-spo2','hv2-temp','hv2-weight','hv2-sugar','hv2-notes'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  } catch(e) { console.error(e); showToast('Error saving vitals'); }
+}
+
+// Parse vitals from a photo/document using Claude Vision
+async function parseVitalsFromImage(file) {
+  const base64NoPrefix = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const result = e.target.result;
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const system = 'You are a medical OCR assistant. Extract vital signs from medical documents.';
+  const prompt = 'Extract vital signs from this document. Return ONLY valid JSON with these keys (include only found values): bp_systolic, bp_diastolic, pulse, spo2, temperature, weight, bloodSugar. Example: {"bp_systolic":120,"bp_diastolic":80,"pulse":72}';
+  const text = await callClaudeVision(system, prompt, base64NoPrefix);
+  return safeParseJSON(text);
 }
 
 // ══ VOICE & UTILS ══
@@ -5104,6 +5606,13 @@ window.saveHealthBill = saveHealthBill;
 window.generateDoctorSummary = generateDoctorSummary;
 window.parseMedVoice = parseMedVoice;
 window.handleMedPhoto = handleMedPhoto;
+// New health v2 exports
+window.logDose = logDose;
+window.saveVital = saveVital;
+window.openAddVitalModal = openAddVitalModal;
+window.openVitalPhotoOCR = openVitalPhotoOCR;
+window.sendHealthChat = sendHealthChat;
+window.toggleHealthSummary = toggleHealthSummary;
 
 // SW registered above at app init
 document.addEventListener('visibilitychange',()=>{
