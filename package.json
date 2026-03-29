@@ -3,6 +3,16 @@
   "private": true,
   "scripts": {
     "test": "node tests/expense-utils.test.js",
-    "test:sync": "node test-sync-automated.js"
+    "test:sync": "node test-sync-automated.js",
+    "test:health:unit": "node tests/health-unit.test.js",
+    "test:health:seed": "node tests/health-seed.js",
+    "test:health:e2e": "node tests/health-e2e.test.js",
+    "test:health": "bash tests/run-health-tests.sh",
+    "test:health:unit-only": "SKIP_SEED=true SKIP_E2E=true bash tests/run-health-tests.sh"
+  },
+  "devDependencies": {
+    "puppeteer": "^21.0.0",
+    "firebase-admin": "^12.0.0",
+    "dotenv": "^16.4.5"
   }
 }
