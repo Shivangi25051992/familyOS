@@ -1771,7 +1771,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRe
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   collection, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, deleteField,
-  getDocs, writeBatch, where, enableIndexedDbPersistence }
+  getDocs, writeBatch, where, enableIndexedDbPersistence, collectionGroup }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
 
@@ -2589,8 +2589,30 @@ function subscribeData(){
   const u2=onSnapshot(query(collection(db,fp+'/tasks'),orderBy('createdAt','desc')),s=>{ data.tasks=s.docs.map(d=>({id:d.id,...d.data()})); renderAll(); rescheduleAllAlarms?.(); });
   const u3=onSnapshot(query(collection(db,fp+'/reminders'),orderBy('date','asc')),s=>{ data.reminders=s.docs.map(d=>({id:d.id,...d.data()})); renderAll(); scheduleNotifications(); });
   const u4=onSnapshot(query(collection(db,fp+'/kidEvents'),orderBy('date','asc')),s=>{ data.kidEvents=s.docs.map(d=>({id:d.id,...d.data()})); renderAll(); scheduleNotifications(); });
-  const u5=onSnapshot(query(collection(db,fp+'/healthProfiles'),orderBy('createdAt','desc')),s=>{ data.healthProfiles=s.docs.map(d=>({id:d.id,...d.data()})); renderHealthProfiles(); if(activeHealthProfileId) subscribeActivePatient(); });
-  unsubs=[u0,u1,u2,u3,u4,u5];
+  // Subscribe to own family's health profiles
+  const u5=onSnapshot(query(collection(db,fp+'/healthProfiles'),orderBy('createdAt','desc')),s=>{ 
+    const ownProfiles = s.docs.map(d=>({id:d.id,...d.data(),familyId:FID}));
+    data.healthProfiles = [...ownProfiles, ...(data.sharedHealthProfiles || [])];
+    renderHealthProfiles(); 
+    if(activeHealthProfileId) subscribeActivePatient(); 
+  });
+  
+  // Subscribe to health profiles shared with this user (collection group query)
+  const u6=onSnapshot(query(collectionGroup(db,'healthProfiles'),where('sharedWith','array-contains',CU.uid)),s=>{
+    const sharedProfiles = s.docs.map(d=>{
+      // Extract family ID from document path: families/{familyId}/healthProfiles/{profileId}
+      const pathParts = d.ref.path.split('/');
+      const familyId = pathParts[1];
+      return {id:d.id,...d.data(),familyId};
+    });
+    data.sharedHealthProfiles = sharedProfiles;
+    // Merge with own profiles
+    const ownProfiles = data.healthProfiles?.filter(p => p.familyId === FID) || [];
+    data.healthProfiles = [...ownProfiles, ...sharedProfiles];
+    renderHealthProfiles();
+  });
+  
+  unsubs=[u0,u1,u2,u3,u4,u5,u6];
 }
 
 function subscribeAutoExpenses(){
@@ -4363,11 +4385,17 @@ function scheduleRenderHealthTab() {
 }
 
 function subscribeActivePatient() {
-  if(!activeHealthProfileId || !FID) return;
+  if(!activeHealthProfileId) return;
   if(activePatientUnsubs.length) { activePatientUnsubs.forEach(u => u()); activePatientUnsubs = []; }
   activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [], chatHistory: [] };
 
-  const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+  // Get the profile to determine which family it belongs to
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if(!p) return;
+  
+  // Use the profile's family ID (for shared profiles from other families)
+  const profileFamilyId = p.familyId || FID;
+  const base = `families/${profileFamilyId}/healthProfiles/${activeHealthProfileId}`;
   const todayS = todayStr();
   const u1 = onSnapshot(query(collection(db, `${base}/reports`), orderBy('date', 'desc')), s => { activePatientData.reports = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); });
   const u2 = onSnapshot(query(collection(db, `${base}/medications`), orderBy('addedAt', 'desc')), s => { activePatientData.medications = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); });
