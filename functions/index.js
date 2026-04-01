@@ -1187,3 +1187,63 @@ exports.healthAnalyzeImageRaw = onCall(
     return { text: response.content[0].text };
   }
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION 8: lookupUserByEmail — Find user UID by email for health record sharing
+// Server-side function with admin access to query users collection
+// ─────────────────────────────────────────────────────────────────────────────
+exports.lookupUserByEmail = onCall(
+  { cors: CORS_ORIGINS },
+  async (request) => {
+    const { email } = request.data || {};
+    
+    // Validate input
+    if (!email || typeof email !== 'string') {
+      throw new Error('Email is required');
+    }
+    
+    // Validate requester is authenticated
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new Error('Unauthenticated');
+    }
+    
+    // Normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      throw new Error('Invalid email format');
+    }
+    
+    try {
+      // Query users collection by email
+      const usersSnapshot = await db.collection('users')
+        .where('email', '==', normalizedEmail)
+        .limit(1)
+        .get();
+      
+      if (usersSnapshot.empty) {
+        return {
+          found: false,
+          message: 'No user found with this email'
+        };
+      }
+      
+      const userDoc = usersSnapshot.docs[0];
+      const userData = userDoc.data();
+      
+      return {
+        found: true,
+        uid: userDoc.id,
+        name: userData.name || userData.displayName || userData.email,
+        email: userData.email
+      };
+      
+    } catch (error) {
+      console.error('Error looking up user:', error);
+      throw new Error('Failed to lookup user: ' + error.message);
+    }
+  }
+);

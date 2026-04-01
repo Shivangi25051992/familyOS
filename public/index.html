@@ -4108,26 +4108,26 @@ async function shareHealthRecord() {
     console.log('Input type:', isEmail ? 'Email' : 'User ID');
     
     if (isEmail) {
-      // Try email lookup (may fail due to permissions)
-      console.log('🔍 Attempting email lookup...');
+      // Use Cloud Function for email lookup (has admin access)
+      console.log('🔍 Looking up user via Cloud Function...');
       try {
         showToast('Looking up user by email...');
-        const usersQuery = query(collection(db, 'users'), where('email', '==', input.toLowerCase()));
-        const usersSnapshot = await getDocs(usersQuery);
         
-        console.log('Query results:', usersSnapshot.size, 'users found');
+        const lookupUserByEmail = httpsCallable(functions, 'lookupUserByEmail');
+        const result = await lookupUserByEmail({ email: input.toLowerCase() });
         
-        if (usersSnapshot.empty) {
+        console.log('Cloud Function response:', result.data);
+        
+        if (!result.data.found) {
           console.error('❌ No user found with email:', input);
-          console.log('💡 TIP: Ask recipient to run copyMyUserId() and share their User ID instead');
-          showToast('User not found. Try asking them for their User ID instead.');
+          console.log('💡 TIP: Make sure they have signed up for FamilyOS with this email');
+          showToast('User not found. Make sure they have a FamilyOS account.');
           return;
         }
         
-        const userDoc = usersSnapshot.docs[0];
-        recipientUid = userDoc.id;
-        recipientName = userDoc.data().name || userDoc.data().email;
-        recipientEmail = input.toLowerCase();
+        recipientUid = result.data.uid;
+        recipientName = result.data.name;
+        recipientEmail = result.data.email;
         
         console.log('✅ User found:', { uid: recipientUid, name: recipientName, email: recipientEmail });
         
@@ -4135,14 +4135,14 @@ async function shareHealthRecord() {
         console.error('❌ Email lookup failed:', e);
         console.error('Error details:', e.message);
         console.log('═══════════════════════════════════════════════════');
-        console.log('💡 SOLUTION: Use User ID instead of email');
+        console.log('💡 FALLBACK: Use User ID instead of email');
         console.log('═══════════════════════════════════════════════════');
         console.log('1. Ask recipient to open console (F12)');
         console.log('2. Ask them to run: copyMyUserId()');
         console.log('3. They will see their User ID');
         console.log('4. Paste their User ID here instead of email');
         console.log('═══════════════════════════════════════════════════\n');
-        showToast('Cannot lookup by email. Please use User ID instead');
+        showToast('Error looking up user. Try User ID instead.');
         return;
       }
     } else {
