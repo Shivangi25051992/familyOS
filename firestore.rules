@@ -7,6 +7,19 @@ service cloud.firestore {
       allow read, write: if request.auth != null
         && request.auth.uid == userId;
     }
+    
+    // Collection group query for shared health profiles
+    // Allows users to query all healthProfiles where they are in sharedWith array
+    match /{path=**}/healthProfiles/{profileId} {
+      allow read: if request.auth != null 
+        && request.auth.uid in resource.data.get('sharedWith', []);
+      
+      // Subcollections of shared profiles (reports, medications, vitals, etc.)
+      match /{subcollection}/{doc} {
+        allow read: if request.auth != null 
+          && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+      }
+    }
 
     // Helper: user is a member (in members array OR in memberProfiles)
     function isFamilyMember(familyId) {
