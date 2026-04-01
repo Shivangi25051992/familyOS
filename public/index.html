@@ -1509,9 +1509,20 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     
     <div id="share-email-section" style="display:none">
       <div class="form-group">
-        <label class="form-label">Recipient Email</label>
-        <input class="form-input" id="share-email-input" type="email" placeholder="doctor@example.com">
-        <div style="font-size:10px;color:var(--text-faint);margin-top:4px">They must have a FamilyOS account with this email</div>
+        <label class="form-label">Recipient Email or User ID</label>
+        <input class="form-input" id="share-email-input" type="text" placeholder="email@example.com or user ID">
+        <div style="font-size:10px;color:var(--text-faint);margin-top:4px">
+          Enter their email or User ID. To get User ID: Ask them to go to Settings → Copy their User ID
+        </div>
+      </div>
+      <div style="background:var(--blue-soft);border:1px solid var(--blue);border-radius:8px;padding:10px;margin-top:10px">
+        <div style="font-size:10px;font-weight:600;color:var(--blue);margin-bottom:4px">💡 How to find User ID:</div>
+        <div style="font-size:10px;color:var(--text-dim)">
+          1. Ask recipient to open FamilyOS<br>
+          2. Go to Settings (⚙️ icon)<br>
+          3. Copy their User ID<br>
+          4. Paste it here
+        </div>
       </div>
     </div>
     
@@ -3894,6 +3905,26 @@ function switchShareType(type) {
   document.getElementById('share-email-section').style.display = type === 'email' ? 'block' : 'none';
 }
 
+// Helper to copy User ID to clipboard
+async function copyMyUserId() {
+  if (!CU || !CU.uid) {
+    showToast('Not logged in');
+    return;
+  }
+  
+  try {
+    await navigator.clipboard.writeText(CU.uid);
+    showToast(`✓ User ID copied: ${CU.uid.substring(0, 8)}...`);
+    console.log('📋 Your User ID:', CU.uid);
+    console.log('Share this ID with others so they can share health records with you');
+  } catch(e) {
+    // Fallback if clipboard API fails
+    const msg = `Your User ID: ${CU.uid}\n\nShare this with others to receive health records.`;
+    alert(msg);
+    console.log('📋 Your User ID:', CU.uid);
+  }
+}
+
 async function openShareHealthModal() {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if (!canDeleteHealthData(p)) {
@@ -4012,39 +4043,61 @@ async function shareHealthRecord() {
     recipientEmail = member.email;
     
   } else {
-    // Email-based sharing (any FamilyOS user)
-    recipientEmail = document.getElementById('share-email-input').value.trim().toLowerCase();
-    if (!recipientEmail) {
-      showToast('Please enter an email address');
+    // Email or UID-based sharing (any FamilyOS user)
+    const input = document.getElementById('share-email-input').value.trim();
+    if (!input) {
+      showToast('Please enter an email or User ID');
       return;
     }
     
-    // Validate email format
+    // Check if input looks like a UID (alphanumeric, 20-30 chars) or email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(recipientEmail)) {
-      showToast('Please enter a valid email address');
-      return;
-    }
+    const isEmail = emailRegex.test(input);
     
-    // Look up user by email in Firestore
-    try {
-      showToast('Looking up user...');
-      const usersQuery = query(collection(db, 'users'), where('email', '==', recipientEmail));
-      const usersSnapshot = await getDocs(usersQuery);
-      
-      if (usersSnapshot.empty) {
-        showToast('No FamilyOS user found with this email');
+    if (isEmail) {
+      // Try email lookup (may fail due to permissions)
+      try {
+        showToast('Looking up user by email...');
+        const usersQuery = query(collection(db, 'users'), where('email', '==', input.toLowerCase()));
+        const usersSnapshot = await getDocs(usersQuery);
+        
+        if (usersSnapshot.empty) {
+          showToast('User not found. Try asking them for their User ID instead.');
+          return;
+        }
+        
+        const userDoc = usersSnapshot.docs[0];
+        recipientUid = userDoc.id;
+        recipientName = userDoc.data().name || userDoc.data().email;
+        recipientEmail = input.toLowerCase();
+        
+      } catch(e) {
+        console.error('Error looking up user by email:', e);
+        showToast('Cannot lookup by email. Please use User ID instead (ask recipient to share their User ID from Settings)');
         return;
       }
+    } else {
+      // Assume it's a User ID
+      recipientUid = input;
       
-      const userDoc = usersSnapshot.docs[0];
-      recipientUid = userDoc.id;
-      recipientName = userDoc.data().name || userDoc.data().email;
-      
-    } catch(e) {
-      console.error('Error looking up user:', e);
-      showToast('Error finding user. They may need to sign up first.');
-      return;
+      // Try to get user info (optional, may fail)
+      try {
+        showToast('Verifying User ID...');
+        const userDoc = await getDoc(doc(db, 'users', recipientUid));
+        if (userDoc.exists()) {
+          recipientName = userDoc.data().name || userDoc.data().email || 'Unknown User';
+          recipientEmail = userDoc.data().email;
+        } else {
+          // User ID doesn't exist
+          showToast('Invalid User ID. Please check and try again.');
+          return;
+        }
+      } catch(e) {
+        console.error('Error verifying user:', e);
+        // If we can't verify, proceed anyway (user might exist but we don't have read permission)
+        recipientName = 'User ' + recipientUid.substring(0, 8);
+        recipientEmail = null;
+      }
     }
   }
   
@@ -7858,6 +7911,7 @@ window.deleteHealthProfile = deleteHealthProfile;
 window.fixProfileOwnership = fixProfileOwnership;
 window.openShareHealthModal = openShareHealthModal;
 window.switchShareType = switchShareType;
+window.copyMyUserId = copyMyUserId;
 window.shareHealthRecord = shareHealthRecord;
 window.revokeHealthAccess = revokeHealthAccess;
 window.showHealthProfiles = showHealthProfiles;
