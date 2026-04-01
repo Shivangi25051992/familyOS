@@ -3947,7 +3947,7 @@ function _renderHealthOverviewInner(el) {
       ` : `<div style="font-size:12px;color:var(--text-faint)">No markers selected yet.</div>`}
     </div>`;
 
-  // Today's medication schedule
+  // Today's medication schedule - compact view
   const activeMeds = activePatientData.medications.filter(m => m.active !== false);
   const schedule = buildMedSchedule(activeMeds);
   const slots = [
@@ -3962,28 +3962,49 @@ function _renderHealthOverviewInner(el) {
     <div class="health-card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="health-card-title">💊 Today's Medicines</div>
-        <span style="font-size:10px;color:var(--text-faint)">${new Date().toLocaleDateString('en-IN',{day:'numeric',month:'short'})}</span>
+        <button class="btn-sm" onclick="toggleOverviewMedSchedule()" id="overview-med-toggle">Show All</button>
       </div>
-      ${slots.map(slot => {
-        const meds = schedule[slot.key] || [];
-        if(!meds.length) return '';
-        return `<div class="med-slot-section">
-          <div class="med-slot-header">${slot.icon} ${slot.label}</div>
-          ${meds.map(m => {
-            const dur = getMedDurationStatus(m);
-            const durText = dur ? (dur.isExpired ? 'Duration complete' : (dur.daysLeft + 1) + ' days left') : '';
+      <div id="overview-med-compact" style="display:block">
+        ${slots.slice(0,2).map(slot => {
+          const meds = schedule[slot.key] || [];
+          if(!meds.length) return '';
+          const medCount = meds.length;
+          const takenCount = meds.filter(m => {
             const doseLog = todayDoses.find(d => d.medicationId === m.id && d.slot === slot.key);
-            const taken = !!doseLog?.taken;
-            return `<div class="med-slot-item ${taken ? 'taken' : ''}">
-              <div class="med-slot-info">
-                <div class="med-slot-name">${safeHtml(m.name)}</div>
-                <div class="med-slot-dose">${safeHtml(m.dose)}${durText ? ' · ' + safeHtml(durText) : ''}${m.notes ? ' · ' + safeHtml(m.notes.slice(0,40)) : ''}</div>
-              </div>
-              <button class="btn-mark-taken ${taken ? 'done' : ''}" onclick="logDose('${m.id}','${safeHtml(m.name)}','${slot.key}',${taken})" ${taken ? 'disabled' : ''}>${taken ? '✓ Done' : 'Mark Taken'}</button>
-            </div>`;
-          }).join('')}
-        </div>`;
-      }).join('')}
+            return !!doseLog?.taken;
+          }).length;
+          return `<div style="padding:8px 0;border-bottom:1px solid var(--gold-border)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:12px;font-weight:600">${slot.icon} ${slot.label}</div>
+              <div style="font-size:10px;color:var(--text-faint)">${takenCount}/${medCount} taken</div>
+            </div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${meds.slice(0,3).map(m => safeHtml(m.name)).join(', ')}${medCount > 3 ? ' +' + (medCount-3) + ' more' : ''}</div>
+          </div>`;
+        }).join('')}
+        <div style="text-align:center;padding:8px;color:var(--text-faint);font-size:11px;cursor:pointer" onclick="switchHealthTab('meds',document.querySelectorAll('#health-tabs .chip')[2])">View full schedule →</div>
+      </div>
+      <div id="overview-med-full" style="display:none">
+        ${slots.map(slot => {
+          const meds = schedule[slot.key] || [];
+          if(!meds.length) return '';
+          return `<div class="med-slot-section">
+            <div class="med-slot-header">${slot.icon} ${slot.label}</div>
+            ${meds.map(m => {
+              const dur = getMedDurationStatus(m);
+              const durText = dur ? (dur.isExpired ? 'Duration complete' : (dur.daysLeft + 1) + ' days left') : '';
+              const doseLog = todayDoses.find(d => d.medicationId === m.id && d.slot === slot.key);
+              const taken = !!doseLog?.taken;
+              return `<div class="med-slot-item ${taken ? 'taken' : ''}">
+                <div class="med-slot-info">
+                  <div class="med-slot-name">${safeHtml(m.name)}</div>
+                  <div class="med-slot-dose">${safeHtml(m.dose)}${durText ? ' · ' + safeHtml(durText) : ''}</div>
+                </div>
+                <button class="btn-mark-taken ${taken ? 'done' : ''}" onclick="logDose('${m.id}','${safeHtml(m.name)}','${slot.key}',${taken})" ${taken ? 'disabled' : ''}>${taken ? '✓ Done' : 'Mark Taken'}</button>
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}
+      </div>
     </div>` : '';
 
   // Latest vitals (merged from most recent readings)
@@ -4060,8 +4081,6 @@ function toggleHealthSummary() {
 
 async function renderHealthReports() {
   const el = document.getElementById('health-tab-reports');
-  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-  const canDelete = canDeleteHealthData(p);
   
   // Trends
   const hemoglobinTrend = activePatientData.reports
@@ -4095,7 +4114,7 @@ async function renderHealthReports() {
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <span class="health-urgency-badge urgency-${r.urgency || 'routine'}">${r.urgency || 'routine'}</span>
-              ${canDelete ? '<button class="edit-btn" onclick="event.stopPropagation();deleteHealthReport(\'' + r.id + '\')">✕</button>' : ''}
+              <button class="edit-btn" onclick="event.stopPropagation();deleteHealthReport('${r.id}')">✕</button>
             </div>
           </div>
           <div style="font-size:13px;line-height:1.5;color:var(--text-dim);margin-top:8px">${safeHtml(r.aiSummary)}</div>
@@ -4293,8 +4312,6 @@ function renderHealthVisits() {
 
 function renderHealthBills() {
   const el = document.getElementById('health-tab-bills');
-  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-  const canDelete = canDeleteHealthData(p);
   const total = activePatientData.bills.reduce((s, b) => s + (b.amount || 0), 0);
   
   const categoryLabels = {
@@ -4305,18 +4322,36 @@ function renderHealthBills() {
     other: 'Other'
   };
   
+  // Category filter state
+  const selectedCat = window._selectedBillCategory || 'all';
+  const filteredBills = selectedCat === 'all' ? activePatientData.bills : activePatientData.bills.filter(b => b.category === selectedCat);
+  
+  // Category totals
+  const catTotals = {};
+  activePatientData.bills.forEach(b => {
+    const cat = b.category || 'other';
+    catTotals[cat] = (catTotals[cat] || 0) + (b.amount || 0);
+  });
+  
   el.innerHTML = `
     <div style="background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:16px;margin-bottom:20px;text-align:center">
       <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px">Total Treatment Cost</div>
       <div style="font-family:'DM Mono',monospace;font-size:28px;color:var(--gold);margin-top:4px">${fmt(total)}</div>
     </div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="sec-title" style="font-size:18px">Health Bills</div>
       <button class="btn-sm fill" onclick="openModal('modal-health-bill')">+ Add Bill</button>
     </div>
+    
+    <div style="display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px">
+      <button class="chip ${selectedCat === 'all' ? 'active' : ''}" onclick="filterBillsByCategory('all')">All (${fmt(total)})</button>
+      ${Object.entries(catTotals).map(([cat, amt]) => `
+        <button class="chip ${selectedCat === cat ? 'active' : ''}" onclick="filterBillsByCategory('${cat}')">${categoryLabels[cat] || cat} (${fmt(amt)})</button>
+      `).join('')}
+    </div>
 
-    ${activePatientData.bills.map(b => `
+    ${filteredBills.map(b => `
       <div class="list-item">
         <div class="list-icon">${b.category === 'medicine' ? '💊' : b.category === 'test' ? '🧪' : b.category === 'procedure' ? '🔬' : '🏥'}</div>
         <div class="list-info">
@@ -4325,7 +4360,7 @@ function renderHealthBills() {
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <div class="list-amount">${fmt(b.amount)}</div>
-          ${canDelete ? '<button class="edit-btn" onclick="deleteHealthBill(\'' + b.id + '\')">✕</button>' : ''}
+          <button class="edit-btn" onclick="deleteHealthBill('${b.id}')">✕</button>
         </div>
       </div>
     `).join('')}
@@ -4956,17 +4991,25 @@ function stripCareNotePrefix(text){
 
 // Smart duplicate detection
 function checkMedicationDuplicate(newMed, existingMeds) {
+  if (!newMed || !newMed.name) return { isDuplicate: false };
+  if (!existingMeds || !Array.isArray(existingMeds)) return { isDuplicate: false };
+  
   const normalize = s => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
   const newName = normalize(newMed.name);
   const newDose = normalize(newMed.dose);
   
+  console.log('[DUP CHECK] Checking:', newName, newDose, 'against', existingMeds.length, 'existing meds');
+  
   for (const existing of existingMeds) {
-    if (!existing.active) continue; // Skip inactive meds
+    if (existing.active === false) continue; // Skip explicitly inactive meds
     const existName = normalize(existing.name);
     const existDose = normalize(existing.dose);
     
+    console.log('[DUP CHECK] Comparing with:', existName, existDose, 'active:', existing.active);
+    
     // Exact name match
     if (newName === existName) {
+      console.log('[DUP CHECK] MATCH FOUND - exact name');
       // Same dose = definite duplicate
       if (newDose === existDose) return { isDuplicate: true, match: existing, confidence: 'high' };
       // Different dose = possible duplicate (user might be updating dose)
@@ -4974,10 +5017,14 @@ function checkMedicationDuplicate(newMed, existingMeds) {
     }
     
     // Fuzzy name match (contains or very similar)
-    if (newName.includes(existName) || existName.includes(newName)) {
-      if (newDose === existDose) return { isDuplicate: true, match: existing, confidence: 'medium' };
+    if (newName.length > 3 && existName.length > 3) {
+      if (newName.includes(existName) || existName.includes(newName)) {
+        console.log('[DUP CHECK] MATCH FOUND - fuzzy name');
+        if (newDose === existDose) return { isDuplicate: true, match: existing, confidence: 'medium' };
+      }
     }
   }
+  console.log('[DUP CHECK] No duplicates found');
   return { isDuplicate: false };
 }
 
@@ -5740,6 +5787,28 @@ function toggleMedDetails(medId) {
   const el = document.getElementById('med-details-' + medId);
   if (!el) return;
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleOverviewMedSchedule() {
+  const compact = document.getElementById('overview-med-compact');
+  const full = document.getElementById('overview-med-full');
+  const btn = document.getElementById('overview-med-toggle');
+  if (!compact || !full || !btn) return;
+  
+  if (compact.style.display === 'none') {
+    compact.style.display = 'block';
+    full.style.display = 'none';
+    btn.textContent = 'Show All';
+  } else {
+    compact.style.display = 'none';
+    full.style.display = 'block';
+    btn.textContent = 'Show Less';
+  }
+}
+
+function filterBillsByCategory(category) {
+  window._selectedBillCategory = category;
+  renderHealthBills();
 }
 
 async function saveVisit() {
@@ -7051,6 +7120,8 @@ window.saveMedication = saveMedication;
 window.toggleMedActive = toggleMedActive;
 window.toggleMedListExpanded = toggleMedListExpanded;
 window.toggleMedDetails = toggleMedDetails;
+window.toggleOverviewMedSchedule = toggleOverviewMedSchedule;
+window.filterBillsByCategory = filterBillsByCategory;
 window.saveVisit = saveVisit;
 window.handleHealthBillPhoto = handleHealthBillPhoto;
 window.saveHealthBill = saveHealthBill;
