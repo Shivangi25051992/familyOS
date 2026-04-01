@@ -26,6 +26,15 @@
   --shadow:0 8px 32px rgba(0,0,0,0.5);
   --shadow-gold:0 4px 24px rgba(201,168,76,0.12);
 }
+[data-theme="light"] {
+  --bg:#F9F7F3; --surface:#FFFFFF; --card:#FEFEFE;
+  --gold:#8B6914; --gold-soft:rgba(139,105,20,0.10);
+  --gold-border:rgba(139,105,20,0.20); --gold-mid:rgba(139,105,20,0.40);
+  --text:#1A1A1A; --text-dim:rgba(26,26,26,0.70);
+  --text-faint:rgba(26,26,26,0.40); --text-ghost:rgba(26,26,26,0.06);
+  --green:#2E7D32; --red:#C62828; --blue:#1565C0; --orange:#E65100;
+  --shadow:0 4px 20px rgba(0,0,0,0.10);
+}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;max-width:430px;margin:0 auto;overflow-x:hidden}
 
@@ -995,6 +1004,20 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     </div>
 
     <div class="settings-section">
+      <div class="settings-section-title">Display</div>
+      <div class="toggle-row" style="background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:14px 16px">
+        <div>
+          <div class="toggle-lbl">Light Mode</div>
+          <div class="toggle-sub">Switch to light theme</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="light-mode-toggle" onchange="toggleLightMode()">
+          <span class="tog-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <div class="settings-section-title">App</div>
       <div class="settings-item" onclick="checkForUpdates()">
         <div class="settings-item-left">
@@ -1555,6 +1578,9 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">Log Vitals <button class="modal-close" onclick="closeModal('modal-health-vital')">✕</button></div>
+    <div id="vital-temp-warning" style="display:none;background:rgba(244,132,95,0.15);border:1px solid var(--orange);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--orange)">
+      ⚠️ Temperature reading looks unusual — please verify on device
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="hv2-date" type="date"></div>
       <div class="form-group"><label class="form-label">Recorded At</label>
@@ -1643,9 +1669,17 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRe
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   collection, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, deleteField,
-  getDocs, writeBatch, where }
+  getDocs, writeBatch, where, enableIndexedDbPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+
+// Initialize theme before anything renders
+(function() {
+  try {
+    const saved = localStorage.getItem('familyos_theme') || 'dark';
+    document.documentElement.dataset.theme = saved;
+  } catch(e) {}
+})();
 
 const fbCfg = {
   apiKey:"AIzaSyD7JzF-dwzdN9j7dwuIakuQMmU01bkwCUI",
@@ -1661,6 +1695,13 @@ try {
   auth = getAuth(fbApp);
   db = getFirestore(fbApp);
   functions = getFunctions(fbApp, 'us-central1');
+  
+  // Enable offline persistence
+  enableIndexedDbPersistence(db).catch(e => {
+    if (e.code === 'failed-precondition') console.warn('Offline persistence: multiple tabs open');
+    else if (e.code === 'unimplemented') console.warn('Offline persistence: not supported');
+    else console.warn('Offline persistence error:', e);
+  });
 } catch (e) {
   console.error('Firebase init failed:', e);
   document.addEventListener('DOMContentLoaded', () => {
@@ -1830,7 +1871,7 @@ function assignTag(val){
 
 // ══ HELPERS ══
 // safeHtml — escapes user-supplied strings before innerHTML injection (XSS prevention)
-const safeHtml=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+// (full definition is in health helpers section)
 const fmt=n=>!n?'₹0':n>=100000?'₹'+(n/100000).toFixed(1)+'L':n>=1000?'₹'+(n/1000).toFixed(0)+'K':'₹'+n;
 const fmtDate=d=>{try{return new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short'});}catch{return d||'';}};
 const spent=()=>data.expenses.reduce((s,e)=>s+(e.amount||0),0);
@@ -1857,6 +1898,14 @@ function showToast(msg){
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2500);
 }
+
+window.toggleLightMode = function() {
+  const isLight = document.documentElement.dataset.theme === 'light';
+  document.documentElement.dataset.theme = isLight ? 'dark' : 'light';
+  LS.set('familyos_theme', isLight ? 'dark' : 'light');
+  const toggle = document.getElementById('light-mode-toggle');
+  if (toggle) toggle.checked = !isLight;
+};
 
 // ══ LOCAL STORAGE (PIN + security) ══
 const LS = {
@@ -2640,6 +2689,12 @@ function renderMembers(){
         <div class="module-name">${m.name}</div>
         <div class="module-desc">${m.desc}</div>
       </div>`).join('');
+  }
+  
+  // Update light mode toggle state
+  const toggle = document.getElementById('light-mode-toggle');
+  if (toggle) {
+    toggle.checked = document.documentElement.dataset.theme === 'light';
   }
 }
 
@@ -3740,6 +3795,12 @@ async function openPatientDashboard(id) {
   subscribeActivePatient();
 }
 
+let _renderHealthDebounceTimer = null;
+function scheduleRenderHealthTab() {
+  clearTimeout(_renderHealthDebounceTimer);
+  _renderHealthDebounceTimer = setTimeout(renderHealthTab, 60);
+}
+
 function subscribeActivePatient() {
   if(!activeHealthProfileId || !FID) return;
   if(activePatientUnsubs.length) { activePatientUnsubs.forEach(u => u()); activePatientUnsubs = []; }
@@ -3747,22 +3808,22 @@ function subscribeActivePatient() {
 
   const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
   const todayS = todayStr();
-  const u1 = onSnapshot(query(collection(db, `${base}/reports`), orderBy('date', 'desc')), s => { activePatientData.reports = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
-  const u2 = onSnapshot(query(collection(db, `${base}/medications`), orderBy('addedAt', 'desc')), s => { activePatientData.medications = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
-  const u3 = onSnapshot(query(collection(db, `${base}/visits`), orderBy('date', 'desc')), s => { activePatientData.visits = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
-  const u4 = onSnapshot(query(collection(db, `${base}/bills`), orderBy('date', 'desc')), s => { activePatientData.bills = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
-  const u5 = onSnapshot(query(collection(db, `${base}/timeline`), orderBy('date', 'desc')), s => { activePatientData.timeline = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
+  const u1 = onSnapshot(query(collection(db, `${base}/reports`), orderBy('date', 'desc')), s => { activePatientData.reports = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); });
+  const u2 = onSnapshot(query(collection(db, `${base}/medications`), orderBy('addedAt', 'desc')), s => { activePatientData.medications = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); });
+  const u3 = onSnapshot(query(collection(db, `${base}/visits`), orderBy('date', 'desc')), s => { activePatientData.visits = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); });
+  const u4 = onSnapshot(query(collection(db, `${base}/bills`), orderBy('date', 'desc')), s => { activePatientData.bills = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); });
+  const u5 = onSnapshot(query(collection(db, `${base}/timeline`), orderBy('date', 'desc')), s => { activePatientData.timeline = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); });
   let u6 = null;
   let u6Fallback = null;
   try {
     u6 = onSnapshot(
       query(collection(db, `${base}/vitals`), orderBy('recordedAtTimestamp', 'desc')),
-      s => { activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); },
+      s => { activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab(); },
       err => {
         console.warn('Vitals snapshot error, falling back:', err);
         if(!u6Fallback){
           u6Fallback = onSnapshot(query(collection(db, `${base}/vitals`), orderBy('date', 'desc')), s => {
-            activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab();
+            activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab();
           });
           activePatientUnsubs.push(u6Fallback);
         }
@@ -3771,7 +3832,7 @@ function subscribeActivePatient() {
   } catch(e) {
     console.warn('Vitals query failed, using fallback:', e);
     u6Fallback = onSnapshot(query(collection(db, `${base}/vitals`), orderBy('date', 'desc')), s => {
-      activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab();
+      activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab();
     });
   }
 
@@ -3779,14 +3840,14 @@ function subscribeActivePatient() {
   let u8 = null;
   try {
     u7 = onSnapshot(query(collection(db, `${base}/doseLogs`), where('date', '==', todayS)), s => {
-      activePatientData.doseLogs = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab();
+      activePatientData.doseLogs = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab();
     });
   } catch(e) {
     console.warn('Dose logs query failed:', e);
   }
   try {
     u8 = onSnapshot(query(collection(db, `${base}/notes`), orderBy('createdAt', 'desc')), s => {
-      activePatientData.notes = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab();
+      activePatientData.notes = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab();
     });
   } catch(e) {
     console.warn('Notes query failed:', e);
@@ -3999,6 +4060,8 @@ function toggleHealthSummary() {
 
 async function renderHealthReports() {
   const el = document.getElementById('health-tab-reports');
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  const canDelete = canDeleteHealthData(p);
   
   // Trends
   const hemoglobinTrend = activePatientData.reports
@@ -4024,21 +4087,24 @@ async function renderHealthReports() {
     ${trendHtml}
     <div id="health-reports-list">
       ${activePatientData.reports.map(r => `
-        <div class="health-card" onclick="this.classList.toggle('expanded')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div class="health-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="this.closest('.health-card').classList.toggle('expanded')">
             <div>
-              <div class="health-card-title">${r.title}</div>
+              <div class="health-card-title">${safeHtml(r.title)}</div>
               <div class="health-card-sub">${formatReportDate(r.date)}</div>
             </div>
-            <span class="health-urgency-badge urgency-${r.urgency || 'routine'}">${r.urgency || 'routine'}</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="health-urgency-badge urgency-${r.urgency || 'routine'}">${r.urgency || 'routine'}</span>
+              ${canDelete ? '<button class="edit-btn" onclick="event.stopPropagation();deleteHealthReport(\'' + r.id + '\')">✕</button>' : ''}
+            </div>
           </div>
-          <div style="font-size:13px;line-height:1.5;color:var(--text-dim)">${r.aiSummary}</div>
+          <div style="font-size:13px;line-height:1.5;color:var(--text-dim);margin-top:8px">${safeHtml(r.aiSummary)}</div>
           <div class="report-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--gold-border)">
             <div style="font-size:11px;font-weight:600;margin-bottom:8px;text-transform:uppercase">Key Findings</div>
             ${(r.keyFindings || []).map(f => `
               <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
-                <span>${f.name}: <strong>${f.value} ${f.unit || ''}</strong></span>
-                <span class="tag tg-${f.flag === 'normal' ? 'green' : f.flag === 'critical' ? 'red' : 'orange'}" style="font-size:9px;padding:1px 6px">${f.flag}</span>
+                <span>${safeHtml(f.name)}: <strong>${safeHtml(f.value)} ${safeHtml(f.unit || '')}</strong></span>
+                <span class="tag tg-${f.flag === 'normal' ? 'green' : f.flag === 'critical' ? 'red' : 'orange'}" style="font-size:9px;padding:1px 6px">${safeHtml(f.flag)}</span>
               </div>
             `).join('')}
           </div>
@@ -4200,7 +4266,17 @@ function renderHealthVisits() {
 
 function renderHealthBills() {
   const el = document.getElementById('health-tab-bills');
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  const canDelete = canDeleteHealthData(p);
   const total = activePatientData.bills.reduce((s, b) => s + (b.amount || 0), 0);
+  
+  const categoryLabels = {
+    consultation: 'Consultation',
+    medicine: 'Pharmacy',
+    test: 'Diagnostic Test',
+    procedure: 'Procedure',
+    other: 'Other'
+  };
   
   el.innerHTML = `
     <div style="background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:16px;margin-bottom:20px;text-align:center">
@@ -4215,12 +4291,15 @@ function renderHealthBills() {
 
     ${activePatientData.bills.map(b => `
       <div class="list-item">
-        <div class="list-icon">${b.category === 'medicine' ? '💊' : b.category === 'test' ? '🧪' : '🏥'}</div>
+        <div class="list-icon">${b.category === 'medicine' ? '💊' : b.category === 'test' ? '🧪' : b.category === 'procedure' ? '🔬' : '🏥'}</div>
         <div class="list-info">
-          <div class="list-name">${b.hospital || 'Medical bill'}</div>
-          <div class="list-sub">${fmtDate(b.date)} · ${b.category}</div>
+          <div class="list-name">${safeHtml(b.hospital || 'Medical bill')}</div>
+          <div class="list-sub">${fmtDate(b.date)} · ${safeHtml(categoryLabels[b.category] || b.category || 'Other')}</div>
         </div>
-        <div class="list-amount">${fmt(b.amount)}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="list-amount">${fmt(b.amount)}</div>
+          ${canDelete ? '<button class="edit-btn" onclick="deleteHealthBill(\'' + b.id + '\')">✕</button>' : ''}
+        </div>
       </div>
     `).join('')}
   `;
@@ -4284,23 +4363,6 @@ function buildVitalItems(vital, includeNotes){
   return items;
 }
 
-function renderSparkline(values, color){
-  if(!values || values.length < 2) return '';
-  const w = 140, h = 36, pad = 4;
-  const min = Math.min.apply(null, values);
-  const max = Math.max.apply(null, values);
-  const span = max - min || 1;
-  let points = '';
-  values.forEach(function(v, i){
-    const x = pad + (i * (w - pad * 2)) / (values.length - 1);
-    const y = h - pad - ((v - min) / span) * (h - pad * 2);
-    points += (i ? ' ' : '') + x.toFixed(1) + ',' + y.toFixed(1);
-  });
-  return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block">' +
-    '<polyline fill="none" stroke="' + color + '" stroke-width="2" points="' + points + '"></polyline>' +
-  '</svg>';
-}
-
 function getLatestVitalSnapshot(vitals){
   if(!vitals || !vitals.length) return null;
   const latest = {};
@@ -4335,7 +4397,7 @@ function getVitalSeries(vitals, key){
 function buildStandardRangesHtml(){
   const keys = Object.keys(VITAL_RANGES);
   let html = '<div class="health-card" style="margin-top:16px">' +
-    '<div class="health-card-title" style="margin-bottom:10px">Standard ranges</div>';
+    '<div class="health-card-title" style="margin-bottom:10px;font-size:12px">Standard medical reference ranges</div>';
   keys.forEach(function(k){
     const r = VITAL_RANGES[k];
     const warn = r.warn && r.warn[0] != null ? r.warn[0] + '–' + r.warn[1] : '—';
@@ -4472,6 +4534,8 @@ async function openVitalPhotoOCR() {
       if(result.weight) document.getElementById('hv2-weight').value = result.weight;
       if(result.bloodSugar) document.getElementById('hv2-sugar').value = result.bloodSugar;
       openAddVitalModal(true);
+      const warning = document.getElementById('vital-temp-warning');
+      if(warning) warning.style.display = pendingVitalMeta?.temperatureSuspicious ? 'block' : 'none';
       showToast('Vitals pre-filled — please verify');
     } catch(e) { console.error(e); showToast('Parsing failed'); }
   };
@@ -4725,6 +4789,11 @@ Formatting rules:
 
 // ══ HEALTH HELPERS ══
 
+function canDeleteHealthData(profile) {
+  if (!CU || !profile) return false;
+  return CU.uid === profile.createdBy || (data.familyDoc && data.familyDoc.primaryOwner === CU.uid);
+}
+
 function resolveMedStartDate(m){
   if(m?.startDate) return m.startDate;
   const ts = getTimestampMillis(m?.addedAt);
@@ -4764,6 +4833,61 @@ function buildVitalsSummary(){
   return `Latest vitals (${dateLabel}): ${parts.join(', ') || 'No values found.'}`;
 }
 
+function renderSparkline(values, color, width, height) {
+  if (!values || values.length < 2) return '';
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const W = width || 120;
+  const H = height || 40;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * W;
+    const y = H - ((v - min) / range) * H;
+    return x + ',' + y;
+  }).join(' ');
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">' +
+    '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<circle cx="' + ((values.length-1)/(values.length-1)*W) + '" cy="' + (H - ((values[values.length-1]-min)/range)*H) + '" r="3" fill="' + color + '"/>' +
+    '</svg>';
+}
+
+function getConditionEmptyMessage(diagnosis, section) {
+  const d = (diagnosis || '').toLowerCase();
+  const isLiver = /liver|hepato|biliary|cirrhosis/.test(d);
+  const isDiabetes = /diabet|glucose|insulin/.test(d);
+  const isCardiac = /heart|cardiac|coronary/.test(d);
+  if (section === 'reports') {
+    if (isLiver) return 'Upload LFT or PET scan reports to track Bilirubin and AFP trends';
+    if (isDiabetes) return 'Upload HbA1c or glucose reports to track blood sugar trends';
+    if (isCardiac) return 'Upload ECG or lipid panel reports to track cardiac markers';
+    return 'Upload medical reports to start tracking health trends';
+  }
+  if (section === 'vitals') {
+    if (isLiver) return 'Log vitals every 4 hours — track BP, SpO2, temperature and pain';
+    return 'Log vitals to start tracking health trends';
+  }
+  return 'No data yet';
+}
+
+function parseVitalsSpeech(text) {
+  const result = {};
+  const bp = text.match(/bp\s*(\d+)\s*(?:over|\/|by)\s*(\d+)/i);
+  if (bp) { result.bpSys = +bp[1]; result.bpDia = +bp[2]; }
+  const pulse = text.match(/pulse\s*(\d+)/i) || text.match(/heart\s*rate\s*(\d+)/i);
+  if (pulse) result.pulse = +pulse[1];
+  const temp = text.match(/temp(?:erature)?\s*([\d.]+)/i);
+  if (temp) result.temp = +temp[1];
+  const spo2 = text.match(/(?:spo2|oxygen|saturation)\s*(\d+)/i);
+  if (spo2) result.spo2 = +spo2[1];
+  const pain = text.match(/pain\s*(\d+)/i);
+  if (pain) result.pain = +pain[1];
+  const weight = text.match(/weight\s*([\d.]+)/i);
+  if (weight) result.weight = +weight[1];
+  const sugar = text.match(/(?:sugar|glucose|blood\s*sugar)\s*(\d+)/i);
+  if (sugar) result.sugar = +sugar[1];
+  return result;
+}
+
 function categorizeCareNote(text){
   const t = String(text || '').toLowerCase();
   if(/protein|shake|supplement|vitamin|omega|multivitamin|whey|ensure/.test(t)) return 'supplement';
@@ -4801,6 +4925,95 @@ function isCareNoteCommand(text){
 
 function stripCareNotePrefix(text){
   return String(text || '').replace(/^(note:|log:|add note:|care note:)\s*/i,'').trim();
+}
+
+// Smart duplicate detection
+function checkMedicationDuplicate(newMed, existingMeds) {
+  const normalize = s => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ');
+  const newName = normalize(newMed.name);
+  const newDose = normalize(newMed.dose);
+  
+  for (const existing of existingMeds) {
+    if (!existing.active) continue; // Skip inactive meds
+    const existName = normalize(existing.name);
+    const existDose = normalize(existing.dose);
+    
+    // Exact name match
+    if (newName === existName) {
+      // Same dose = definite duplicate
+      if (newDose === existDose) return { isDuplicate: true, match: existing, confidence: 'high' };
+      // Different dose = possible duplicate (user might be updating dose)
+      return { isDuplicate: true, match: existing, confidence: 'medium' };
+    }
+    
+    // Fuzzy name match (contains or very similar)
+    if (newName.includes(existName) || existName.includes(newName)) {
+      if (newDose === existDose) return { isDuplicate: true, match: existing, confidence: 'medium' };
+    }
+  }
+  return { isDuplicate: false };
+}
+
+function checkReportDuplicate(newReport, existingReports) {
+  const normalize = s => String(s || '').toLowerCase().trim();
+  const newTitle = normalize(newReport.title);
+  const newDate = newReport.date;
+  
+  for (const existing of existingReports) {
+    const existTitle = normalize(existing.title);
+    const existDate = existing.date;
+    
+    // Same title and date = likely duplicate
+    if (newTitle === existTitle && newDate === existDate) {
+      return { isDuplicate: true, match: existing, confidence: 'high' };
+    }
+    
+    // Same date and similar title
+    if (newDate === existDate && (newTitle.includes(existTitle) || existTitle.includes(newTitle))) {
+      return { isDuplicate: true, match: existing, confidence: 'medium' };
+    }
+  }
+  return { isDuplicate: false };
+}
+
+function checkVitalDuplicate(newVital, existingVitals) {
+  const newDate = newVital.date;
+  const newTime = newVital.time;
+  
+  for (const existing of existingVitals) {
+    // Same date and time = likely duplicate
+    if (existing.date === newDate && existing.time === newTime) {
+      // Check if values are similar
+      const bpMatch = !newVital.bp_systolic || !existing.bp_systolic || 
+                      Math.abs(newVital.bp_systolic - existing.bp_systolic) < 5;
+      const pulseMatch = !newVital.pulse || !existing.pulse || 
+                         Math.abs(newVital.pulse - existing.pulse) < 5;
+      if (bpMatch && pulseMatch) {
+        return { isDuplicate: true, match: existing, confidence: 'high' };
+      }
+    }
+  }
+  return { isDuplicate: false };
+}
+
+function checkBillDuplicate(newBill, existingBills) {
+  const newDate = newBill.date;
+  const newAmount = parseFloat(newBill.amount) || 0;
+  const normalize = s => String(s || '').toLowerCase().trim();
+  const newHospital = normalize(newBill.hospital);
+  
+  for (const existing of existingBills) {
+    const existAmount = parseFloat(existing.amount) || 0;
+    const existDate = existing.date;
+    const existHospital = normalize(existing.hospital);
+    
+    // Same date, amount, and hospital = likely duplicate
+    if (existDate === newDate && Math.abs(existAmount - newAmount) < 10 && 
+        newHospital === existHospital) {
+      return { isDuplicate: true, match: existing, confidence: 'high' };
+    }
+  }
+  return { isDuplicate: false };
 }
 
 function buildHealthChatContext(profile){
@@ -5137,8 +5350,8 @@ async function parseVitalsFromImage(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-  const system = 'You are a medical OCR assistant. You are reading a medical device display. Preserve ALL decimal places exactly as shown (e.g. 98.6, not 99; 91.1, not 91 or 97). Capture both value AND unit (°F or °C for temp, % for SpO2). If a digit is ambiguous, prefer the medically plausible value.';
-  const prompt = 'Extract vital signs from this document. Return ONLY valid JSON with these keys (include only found values): bp_systolic, bp_diastolic, pulse, spo2, temperature, temperatureUnit, weight, bloodSugar, perfusionIndex, respirationRate, rawText. Example: {"bp_systolic":120,"bp_diastolic":80,"pulse":72,"spo2":98,"temperature":98.6,"temperatureUnit":"°F","perfusionIndex":2.1,"respirationRate":18}';
+  const system = 'You are a medical OCR assistant. CRITICAL: Preserve exact decimal values. 91.1 must NOT be read as 97 or 91. 98.6°F must NOT become 99°F. Read every digit individually. Return temperatureUnit as "F" or "C". Plausible ranges: temp 85-110°F, SpO2 50-100%, pulse 20-250bpm. If a value seems implausible, return it anyway with a "suspicious:true" flag.';
+  const prompt = 'Extract vital signs from this document. Return ONLY valid JSON with these keys (include only found values): bp_systolic, bp_diastolic, pulse, spo2, temperature, temperatureUnit, weight, bloodSugar, perfusionIndex, respirationRate, rawText. Example: {"bp_systolic":120,"bp_diastolic":80,"pulse":72,"spo2":98,"temperature":98.6,"temperatureUnit":"F","perfusionIndex":2.1,"respirationRate":18}';
   const text = await callClaudeVision(system, prompt, base64NoPrefix);
   const result = safeParseJSON(text);
   if(!result) return null;
@@ -5364,6 +5577,14 @@ async function confirmSaveReport() {
   if (isSavingReport) return;
   const r = pendingReport;
   if(!r) return;
+  
+  // Check for duplicates
+  const dupCheck = checkReportDuplicate(r, activePatientData.reports);
+  if (dupCheck.isDuplicate) {
+    const msg = `Similar report found: ${dupCheck.match.title} on ${formatReportDate(dupCheck.match.date)}. Save anyway?`;
+    if (!confirm(msg)) return;
+  }
+  
   isSavingReport = true;
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
@@ -5441,6 +5662,15 @@ async function saveMedication() {
   const notes = document.getElementById('hm-notes').value.trim();
   
   if(!name) return;
+  
+  // Check for duplicates
+  const dupCheck = checkMedicationDuplicate({ name, dose }, activePatientData.medications);
+  if (dupCheck.isDuplicate) {
+    const conf = dupCheck.confidence === 'high' ? 'This medication already exists' : 'Similar medication found';
+    const msg = `${conf}: ${dupCheck.match.name} ${dupCheck.match.dose}. Add anyway?`;
+    if (!confirm(msg)) return;
+  }
+  
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
     const medPayload = { name, dose, frequency: freq, timing, notes, durationDays, startDate, active: true, addedAt: serverTimestamp() };
@@ -5510,6 +5740,18 @@ async function saveHealthBill() {
   const category = document.getElementById('hb-cat').value;
   const base64 = window._pendingBillBase64;
 
+  if (!date || !hospital || !amount) {
+    showToast('Please fill required fields');
+    return;
+  }
+
+  // Check for duplicates
+  const dupCheck = checkBillDuplicate({ date, hospital, amount }, activePatientData.bills);
+  if (dupCheck.isDuplicate) {
+    const msg = `Similar bill found: ${dupCheck.match.hospital} ₹${dupCheck.match.amount} on ${formatReportDate(dupCheck.match.date)}. Add anyway?`;
+    if (!confirm(msg)) return;
+  }
+
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
     await addDoc(collection(db, `${base}/bills`), { date, hospital, amount, category, imageBase64: base64, addedAt: serverTimestamp() });
@@ -5522,6 +5764,33 @@ async function saveHealthBill() {
     showToast('Bill saved ✓');
     closeModal('modal-health-bill');
   } catch(e) { console.error(e); showToast('Error saving'); }
+}
+
+async function deleteHealthBill(billId) {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!canDeleteHealthData(p)) {
+    showToast('Only the profile owner can delete bills');
+    return;
+  }
+  if (!confirm('Delete this bill?')) return;
+  try {
+    await deleteDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/bills`, billId));
+    showToast('Bill deleted');
+  } catch(e) { console.error(e); showToast('Error deleting'); }
+}
+
+async function deleteHealthReport(reportId) {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!canDeleteHealthData(p)) {
+    showToast('Only the profile owner can delete reports');
+    return;
+  }
+  if (!confirm('Delete this report?')) return;
+  try {
+    await deleteDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/reports`, reportId));
+    await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummaryStale: true, updatedAt: serverTimestamp() });
+    showToast('Report deleted');
+  } catch(e) { console.error(e); showToast('Error deleting'); }
 }
 
 async function generateDoctorSummary() {
@@ -5544,6 +5813,82 @@ async function generateDoctorSummary() {
       <p style="font-size:12px;color:#888;text-align:center">Generated by FamilyOS · Take a screenshot to share with your doctor</p>
     </body></html>`);
   } catch(e) { console.error(e); showToast('AI error'); }
+}
+
+function exportHealthPDF() {
+  if(!activeHealthProfileId) return;
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if(!p) return;
+  
+  const age = p.dob ? Math.floor((Date.now() - Date.parse(p.dob)) / 31557600000) : 'N/A';
+  const medications = activePatientData.medications.filter(m => m.active !== false);
+  const latest = getLatestVitalSnapshot(activePatientData.vitals || []);
+  const reports = activePatientData.reports.slice(0, 3);
+  const visits = activePatientData.visits.slice(0, 3);
+  const today = new Date().toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
+  
+  let html = '<html><head><style>@media print{body{font-size:12pt;color:#000}}</style></head>';
+  html += '<body style="font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:auto">';
+  html += '<h1 style="color:#8B6914;margin-bottom:8px">' + safeHtml(p.name) + '</h1>';
+  html += '<p style="font-size:14px;color:#666;margin-bottom:32px">Age: ' + age + ' · Diagnosis: ' + safeHtml(p.diagnosis || 'N/A') + '<br>Export Date: ' + today + '</p>';
+  
+  html += '<h2 style="font-size:16px;border-bottom:2px solid #ddd;padding-bottom:6px;margin-top:24px">Current Medications</h2>';
+  if(medications.length){
+    html += '<table style="width:100%;border-collapse:collapse;margin-top:12px"><thead><tr style="background:#f5f5f5"><th style="text-align:left;padding:8px;border:1px solid #ddd">Name</th><th style="text-align:left;padding:8px;border:1px solid #ddd">Dose</th><th style="text-align:left;padding:8px;border:1px solid #ddd">Frequency</th><th style="text-align:left;padding:8px;border:1px solid #ddd">Timing</th></tr></thead><tbody>';
+    medications.forEach(m => {
+      html += '<tr><td style="padding:8px;border:1px solid #ddd">' + safeHtml(m.name) + '</td><td style="padding:8px;border:1px solid #ddd">' + safeHtml(m.dose||'') + '</td><td style="padding:8px;border:1px solid #ddd">' + safeHtml(m.frequency||'') + '</td><td style="padding:8px;border:1px solid #ddd">' + safeHtml(m.timing||'') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<p style="color:#999;font-size:13px">No active medications</p>';
+  }
+  
+  html += '<h2 style="font-size:16px;border-bottom:2px solid #ddd;padding-bottom:6px;margin-top:24px">Latest Vitals</h2>';
+  if(latest){
+    html += '<table style="width:100%;border-collapse:collapse;margin-top:12px"><tbody>';
+    if(latest.bp_systolic) html += '<tr><td style="padding:6px;border:1px solid #ddd;font-weight:600">Blood Pressure</td><td style="padding:6px;border:1px solid #ddd">' + latest.bp_systolic + '/' + (latest.bp_diastolic||'?') + ' mmHg</td></tr>';
+    if(latest.pulse) html += '<tr><td style="padding:6px;border:1px solid #ddd;font-weight:600">Pulse</td><td style="padding:6px;border:1px solid #ddd">' + latest.pulse + ' bpm</td></tr>';
+    if(latest.spo2) html += '<tr><td style="padding:6px;border:1px solid #ddd;font-weight:600">SpO2</td><td style="padding:6px;border:1px solid #ddd">' + latest.spo2 + '%</td></tr>';
+    if(latest.temperature) html += '<tr><td style="padding:6px;border:1px solid #ddd;font-weight:600">Temperature</td><td style="padding:6px;border:1px solid #ddd">' + latest.temperature + (latest.temperatureUnit||'°F') + '</td></tr>';
+    if(latest.weight) html += '<tr><td style="padding:6px;border:1px solid #ddd;font-weight:600">Weight</td><td style="padding:6px;border:1px solid #ddd">' + latest.weight + ' kg</td></tr>';
+    if(latest.bloodSugar) html += '<tr><td style="padding:6px;border:1px solid #ddd;font-weight:600">Blood Sugar</td><td style="padding:6px;border:1px solid #ddd">' + latest.bloodSugar + ' mg/dL</td></tr>';
+    html += '</tbody></table>';
+  } else {
+    html += '<p style="color:#999;font-size:13px">No vitals recorded</p>';
+  }
+  
+  html += '<h2 style="font-size:16px;border-bottom:2px solid #ddd;padding-bottom:6px;margin-top:24px">Recent Reports</h2>';
+  if(reports.length){
+    reports.forEach(r => {
+      html += '<div style="margin:12px 0;padding:12px;background:#f9f9f9;border-left:3px solid #8B6914">';
+      html += '<div style="font-weight:600;margin-bottom:4px">' + safeHtml(r.title) + '</div>';
+      html += '<div style="font-size:12px;color:#666;margin-bottom:6px">' + formatReportDate(r.date) + '</div>';
+      if(r.aiSummary) html += '<div style="font-size:13px;line-height:1.5">' + safeHtml(r.aiSummary.slice(0,300)) + (r.aiSummary.length > 300 ? '...' : '') + '</div>';
+      if(r.keyFindings && r.keyFindings.length){
+        html += '<div style="margin-top:8px;font-size:12px"><strong>Key Findings:</strong> ' + r.keyFindings.map(f => safeHtml(f.name) + ': ' + safeHtml(f.value) + ' ' + safeHtml(f.unit||'')).join(', ') + '</div>';
+      }
+      html += '</div>';
+    });
+  } else {
+    html += '<p style="color:#999;font-size:13px">No reports</p>';
+  }
+  
+  html += '<h2 style="font-size:16px;border-bottom:2px solid #ddd;padding-bottom:6px;margin-top:24px">Upcoming Visits</h2>';
+  if(visits.length){
+    visits.forEach(v => {
+      html += '<div style="margin:8px 0"><strong>' + formatReportDate(v.date) + '</strong> — ' + safeHtml(v.hospital||'Hospital') + (v.doctor ? ' (Dr. ' + safeHtml(v.doctor) + ')' : '') + '</div>';
+    });
+  } else {
+    html += '<p style="color:#999;font-size:13px">No upcoming visits</p>';
+  }
+  
+  html += '<hr style="margin:40px 0;opacity:0.2">';
+  html += '<p style="font-size:11px;color:#888;text-align:center">Generated by FamilyOS on ' + today + '</p>';
+  html += '</body></html>';
+  
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  setTimeout(() => win.print(), 500);
 }
 
 async function parseMedVoice(transcript) {
@@ -5632,9 +5977,31 @@ window.saveAllMedsFromReview = async function(){
     if(name) meds.push({ name, dose, frequency, timing, notes, durationDays, startDate });
   });
   if(!meds.length){ showToast('No valid medications'); return; }
+  
+  // Check for duplicates in batch
+  const duplicates = [];
+  const toAdd = [];
+  meds.forEach(m => {
+    const dupCheck = checkMedicationDuplicate(m, activePatientData.medications);
+    if (dupCheck.isDuplicate) {
+      duplicates.push({ med: m, match: dupCheck.match, confidence: dupCheck.confidence });
+    } else {
+      toAdd.push(m);
+    }
+  });
+  
+  // Show duplicate summary if found
+  if (duplicates.length > 0) {
+    const dupNames = duplicates.map(d => d.med.name).join(', ');
+    const msg = `${duplicates.length} duplicate(s) found: ${dupNames}. Skip duplicates and add ${toAdd.length} new medication(s)?`;
+    if (!confirm(msg)) return;
+  }
+  
+  const finalMeds = toAdd.length > 0 ? toAdd : meds;
+  
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
-    const ops = meds.map(function(m){
+    const ops = finalMeds.map(function(m){
       return addDoc(collection(db, `${base}/medications`), { name:m.name, dose:m.dose, frequency:m.frequency, timing:m.timing, notes:m.notes, durationDays:m.durationDays, startDate:m.startDate, active:true, addedAt: serverTimestamp() })
         .then(function(ref){
           return addDoc(collection(db, `${base}/timeline`), { date: todayStr(), type: 'medication', title: 'New Med: ' + m.name, detail: (m.dose || '') + ' ' + (m.frequency || ''), addedAt: serverTimestamp() })
@@ -5643,7 +6010,7 @@ window.saveAllMedsFromReview = async function(){
     });
     await Promise.all(ops);
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummaryStale: true, updatedAt: serverTimestamp() });
-    showToast(meds.length + ' medications added ✓');
+    showToast(finalMeds.length + ' medication(s) added ✓' + (duplicates.length > 0 ? ` (${duplicates.length} skipped)` : ''));
     clearMedReview();
     closeModal('modal-health-med');
   } catch(e) { console.error(e); showToast('Error saving'); }
@@ -6635,7 +7002,10 @@ window.toggleMedActive = toggleMedActive;
 window.saveVisit = saveVisit;
 window.handleHealthBillPhoto = handleHealthBillPhoto;
 window.saveHealthBill = saveHealthBill;
+window.deleteHealthBill = deleteHealthBill;
+window.deleteHealthReport = deleteHealthReport;
 window.generateDoctorSummary = generateDoctorSummary;
+window.exportHealthPDF = exportHealthPDF;
 window.parseMedVoice = parseMedVoice;
 window.handleMedPhoto = handleMedPhoto;
 // New health v2 exports
@@ -6646,6 +7016,13 @@ window.openVitalPhotoOCR = openVitalPhotoOCR;
 window.sendHealthChat = sendHealthChat;
 window.toggleHealthSummary = toggleHealthSummary;
 window.safeHtml = safeHtml; // expose for any inline-onclick context
+window.canDeleteHealthData = canDeleteHealthData;
+window.renderSparkline = renderSparkline;
+window.parseVitalsSpeech = parseVitalsSpeech;
+window.checkMedicationDuplicate = checkMedicationDuplicate;
+window.checkReportDuplicate = checkReportDuplicate;
+window.checkVitalDuplicate = checkVitalDuplicate;
+window.checkBillDuplicate = checkBillDuplicate;
 
 // SW registered above at app init
 document.addEventListener('visibilitychange',()=>{
