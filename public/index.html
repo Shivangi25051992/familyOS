@@ -3871,11 +3871,33 @@ async function openShareHealthModal() {
   // Populate patient name
   document.getElementById('share-patient-name').textContent = p.name;
   
+  // Check if family members are loaded
+  if (!data.members || data.members.length === 0) {
+    showToast('Loading family members...');
+    // Try to load family members
+    try {
+      const familyDoc = await getDoc(doc(db, 'families', FID));
+      if (familyDoc.exists()) {
+        const familyData = familyDoc.data();
+        data.members = familyData.members || [];
+      }
+    } catch(e) {
+      console.error('Error loading family members:', e);
+      showToast('Error loading family members');
+      return;
+    }
+  }
+  
   // Populate family members dropdown (exclude current user)
   const select = document.getElementById('share-member-select');
-  const members = data.members.filter(m => m.uid !== CU.uid);
-  select.innerHTML = '<option value="">Select member...</option>' + 
-    members.map(m => `<option value="${m.uid}">${m.name}</option>`).join('');
+  const members = (data.members || []).filter(m => m.uid !== CU.uid);
+  
+  if (members.length === 0) {
+    select.innerHTML = '<option value="">No other family members found</option>';
+  } else {
+    select.innerHTML = '<option value="">Select member...</option>' + 
+      members.map(m => `<option value="${m.uid}">${safeHtml(m.name || 'Unknown')}</option>`).join('');
+  }
   
   // Load existing shares
   await loadExistingShares();
@@ -3895,11 +3917,13 @@ async function loadExistingShares() {
     return;
   }
   
+  const members = data.members || [];
+  
   el.innerHTML = `
     <div style="border-top:1px solid var(--gold-border);padding-top:16px">
       <div style="font-size:11px;font-weight:600;margin-bottom:10px;color:var(--text-faint);text-transform:uppercase">Currently Shared With</div>
       ${sharedWith.map(uid => {
-        const member = data.members.find(m => m.uid === uid);
+        const member = members.find(m => m.uid === uid);
         const shareDoc = p.shareDetails?.find(s => s.uid === uid);
         const expiresAt = shareDoc?.expiresAt;
         const expiresDate = expiresAt ? new Date(expiresAt).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}) : 'Never';
@@ -3928,7 +3952,8 @@ async function shareHealthRecord() {
   }
   
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-  const member = data.members.find(m => m.uid === memberUid);
+  const members = data.members || [];
+  const member = members.find(m => m.uid === memberUid);
   
   if (!member) {
     showToast('Member not found');
@@ -4026,7 +4051,8 @@ function renderHealthProfiles() {
   if (sharedProfiles.length > 0) {
     html += '<div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;font-weight:600">Shared With You</div>';
     html += sharedProfiles.map(p => {
-      const owner = data.members.find(m => m.uid === p.createdBy);
+      const members = data.members || [];
+      const owner = members.find(m => m.uid === p.createdBy);
       return `
         <div class="health-card" onclick="openPatientDashboard('${p.id}')" style="border-left:3px solid var(--blue)">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -4061,6 +4087,19 @@ async function openPatientDashboard(id) {
 
   document.getElementById('health-patient-name').textContent = p.name;
   document.getElementById('health-patient-diagnosis').textContent = p.diagnosis;
+  
+  // Debug logging
+  console.log('🔍 Profile Debug:', {
+    profileName: p.name,
+    profileId: p.id,
+    createdBy: p.createdBy,
+    currentUser: CU?.uid,
+    currentUserEmail: CU?.email,
+    familyPrimaryOwner: data.familyDoc?.primaryOwner,
+    isFamilyPrimaryOwner: data.familyDoc?.primaryOwner === CU?.uid,
+    isOwner: CU?.uid === p.createdBy,
+    canDelete: canDeleteHealthData(p)
+  });
   
   // Check if this is a shared profile (user has read-only access)
   window._isSharedHealthProfile = p.sharedWith && p.sharedWith.includes(CU.uid);
@@ -5350,7 +5389,64 @@ Formatting rules:
 
 function canDeleteHealthData(profile) {
   if (!CU || !profile) return false;
+  // If createdBy is missing, assume family primary owner created it
+  if (!profile.createdBy && data.familyDoc && data.familyDoc.primaryOwner === CU.uid) {
+    return true;
+  }
   return CU.uid === profile.createdBy || (data.familyDoc && data.familyDoc.primaryOwner === CU.uid);
+}
+
+// Utility to fix old profiles missing createdBy field
+async function fixProfileOwnership(profileId) {
+  if (!CU) {
+    console.error('❌ No current user');
+    showToast('Error: Not logged in');
+    return;
+  }
+  if (!FID) {
+    console.error('❌ No family ID');
+    showToast('Error: No family found');
+    return;
+  }
+  
+  const p = data.healthProfiles.find(x => x.id === profileId);
+  if (!p) {
+    console.error('❌ Profile not found:', profileId);
+    showToast('Error: Profile not found');
+    return;
+  }
+  
+  if (p.createdBy) {
+    console.log('ℹ️ Profile already has createdBy:', p.createdBy);
+    showToast('Profile already has owner');
+    return;
+  }
+  
+  console.log('🔄 Updating profile:', {
+    profileId,
+    profileName: p.name,
+    familyId: FID,
+    newOwner: CU.uid,
+    path: `families/${FID}/healthProfiles/${profileId}`
+  });
+  
+  try {
+    const docRef = doc(db, `families/${FID}/healthProfiles`, profileId);
+    await updateDoc(docRef, {
+      createdBy: CU.uid,
+      updatedAt: serverTimestamp()
+    });
+    showToast('✅ Profile ownership updated!');
+    console.log('✅ Successfully updated profile ownership');
+    
+    // Force refresh the profile data
+    setTimeout(() => {
+      window.location.reload();
+    }, 1000);
+  } catch(e) {
+    console.error('❌ Error fixing profile ownership:', e);
+    showToast('Error: ' + e.message);
+  }
 }
 
 function resolveMedStartDate(m){
@@ -7657,6 +7753,7 @@ if(typeof todayStr==='undefined') window.todayStr=()=>new Date().toISOString().s
 // Health Exposures
 window.saveHealthProfile = saveHealthProfile;
 window.deleteHealthProfile = deleteHealthProfile;
+window.fixProfileOwnership = fixProfileOwnership;
 window.openShareHealthModal = openShareHealthModal;
 window.shareHealthRecord = shareHealthRecord;
 window.revokeHealthAccess = revokeHealthAccess;
