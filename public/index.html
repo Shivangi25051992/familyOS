@@ -4600,6 +4600,8 @@ function buildVitalsTrendsHtml(vitals){
 
 function renderHealthVitals() {
   const el = document.getElementById('health-tab-vitals');
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  const canDelete = canDeleteHealthData(p);
   const vitals = activePatientData.vitals || [];
   const latest = vitals[0];
 
@@ -4617,7 +4619,10 @@ function renderHealthVitals() {
       '<div class="health-card" style="margin-bottom:14px">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
           '<div class="health-card-title">📊 Latest Reading</div>' +
-          '<span style="font-size:10px;color:var(--text-faint)">' + formatReportDate(latest.date) + ' · ' + safeHtml(latest.recordedAt||'home') + '</span>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<span style="font-size:10px;color:var(--text-faint)">' + formatReportDate(latest.date) + ' · ' + safeHtml(latest.recordedAt||'home') + '</span>' +
+            (canDelete ? '<button class="edit-btn" onclick="deleteVital(\'' + latest.id + '\')">✕</button>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="health-vitals-grid">' + chips + '</div>' +
         (latest.notes ? '<div style="font-size:11px;color:var(--text-faint);margin-top:6px">' + safeHtml(latest.notes) + '</div>' : '') +
@@ -4640,7 +4645,10 @@ function renderHealthVitals() {
           '<div style="font-size:12px;font-weight:600">' + formatReportDate(v.date) + (v.time ? ' · ' + safeHtml(v.time) : '') + '</div>' +
           '<div style="font-size:10px;color:var(--text-faint)">' + safeHtml(v.recordedAt||'home') + '</div>' +
         '</div>' +
-        '<div style="text-align:right;font-size:12px;font-family:' + "'DM Mono'" + ',monospace">' + right + '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+          '<div style="text-align:right;font-size:12px;font-family:' + "'DM Mono'" + ',monospace">' + right + '</div>' +
+          (canDelete ? '<button class="edit-btn" onclick="deleteVital(\'' + v.id + '\')">✕</button>' : '') +
+        '</div>' +
       '</div>';
     });
   }
@@ -5584,6 +5592,8 @@ async function createMedicationReminders(med){
     const repeatEnds = dur?.endDate || null;
     const existing = data.reminders.filter(r => r.medicationId === med.id);
     const basePath = `families/${FID}/reminders`;
+    
+    // Create daily dose reminders
     for(const slot of slots){
       if(existing.some(r => r.slot === slot)) continue;
       await addDoc(collection(db, basePath), {
@@ -5601,6 +5611,30 @@ async function createMedicationReminders(med){
         addedBy: CU.uid,
         createdAt: serverTimestamp()
       });
+    }
+    
+    // Create refill reminder (3 days before duration ends)
+    if(dur && dur.durationDays && dur.durationDays > 3 && dur.endDate){
+      const refillExists = existing.some(r => r.type === 'Refill');
+      if(!refillExists){
+        const endMs = Date.parse(dur.endDate);
+        const refillMs = endMs - (3 * 86400000); // 3 days before
+        const refillDate = new Date(refillMs).toISOString().split('T')[0];
+        
+        await addDoc(collection(db, basePath), {
+          text: `Refill ${med.name} - only 3 days left`,
+          date: refillDate,
+          time: '10:00',
+          type: 'Refill',
+          repeat: 'none',
+          snooze: '60',
+          assigned: 'self',
+          sharedWithSecondary: true,
+          medicationId: med.id,
+          addedBy: CU.uid,
+          createdAt: serverTimestamp()
+        });
+      }
     }
   } catch(e){ console.warn('Medication reminder create failed', e); }
 }
@@ -6168,6 +6202,19 @@ async function deleteHealthReport(reportId) {
     await deleteDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/reports`, reportId));
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummaryStale: true, updatedAt: serverTimestamp() });
     showToast('Report deleted');
+  } catch(e) { console.error(e); showToast('Error deleting'); }
+}
+
+async function deleteVital(vitalId) {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!canDeleteHealthData(p)) {
+    showToast('Only the profile owner can delete vitals');
+    return;
+  }
+  if (!confirm('Delete this vital reading?')) return;
+  try {
+    await deleteDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/vitals`, vitalId));
+    showToast('Vital deleted');
   } catch(e) { console.error(e); showToast('Error deleting'); }
 }
 
@@ -7387,6 +7434,7 @@ window.handleHealthBillPhoto = handleHealthBillPhoto;
 window.saveHealthBill = saveHealthBill;
 window.deleteHealthBill = deleteHealthBill;
 window.deleteHealthReport = deleteHealthReport;
+window.deleteVital = deleteVital;
 window.generateDoctorSummary = generateDoctorSummary;
 window.exportHealthPDF = exportHealthPDF;
 window.parseMedVoice = parseMedVoice;
