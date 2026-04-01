@@ -7450,6 +7450,7 @@ async function parseMedVoice(transcript) {
 function buildMedReviewList(meds){
   let html = '';
   meds.forEach(function(m, idx){
+    const isRequired = m.required !== false; // Default to true
     html += '<div class="health-card" style="margin-bottom:10px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
         '<div style="font-size:12px;font-weight:600">Medication ' + (idx + 1) + '</div>' +
@@ -7465,6 +7466,15 @@ function buildMedReviewList(meds){
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
         '<div class="form-group"><label class="form-label">Duration (days)</label><input class="form-input" id="med-review-duration-' + idx + '" value="' + safeHtml(m.durationDays || '') + '" placeholder="e.g. 5"></div>' +
         '<div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="med-review-start-' + idx + '" value="' + safeHtml(m.startDate || '') + '" placeholder="YYYY-MM-DD"></div>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label style="display:flex;align-items:center;cursor:pointer;padding:8px;background:var(--surface);border-radius:6px">' +
+          '<input type="checkbox" id="med-review-required-' + idx + '" ' + (isRequired ? 'checked' : '') + ' style="margin-right:10px;width:18px;height:18px;cursor:pointer">' +
+          '<div style="flex:1">' +
+            '<div style="font-size:12px;font-weight:500;color:var(--text)">Required Medication</div>' +
+            '<div style="font-size:10px;color:var(--text-faint)">Uncheck if optional/SOS/PRN/as-needed</div>' +
+          '</div>' +
+        '</label>' +
       '</div>' +
       '<div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="med-review-notes-' + idx + '" value="' + safeHtml(m.notes || '') + '" placeholder="Optional notes"></div>' +
     '</div>';
@@ -7513,7 +7523,8 @@ window.saveAllMedsFromReview = async function(){
     const rawStartDate = document.getElementById('med-review-start-' + idx)?.value || null;
     const startDate = durationDays ? (rawStartDate || todayStr()) : (rawStartDate || null);
     const notes = document.getElementById('med-review-notes-' + idx)?.value?.trim() || '';
-    if(name) meds.push({ name, dose, frequency, timing, notes, durationDays, startDate });
+    const required = document.getElementById('med-review-required-' + idx)?.checked !== false;
+    if(name) meds.push({ name, dose, frequency, timing, notes, durationDays, startDate, required });
   });
   if(!meds.length){ showToast('No valid medications'); return; }
   
@@ -7541,7 +7552,18 @@ window.saveAllMedsFromReview = async function(){
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
     const ops = finalMeds.map(function(m){
-      return addDoc(collection(db, `${base}/medications`), { name:m.name, dose:m.dose, frequency:m.frequency, timing:m.timing, notes:m.notes, durationDays:m.durationDays, startDate:m.startDate, active:true, addedAt: serverTimestamp() })
+      return addDoc(collection(db, `${base}/medications`), { 
+        name:m.name, 
+        dose:m.dose, 
+        frequency:m.frequency, 
+        timing:m.timing, 
+        notes:m.notes, 
+        durationDays:m.durationDays, 
+        startDate:m.startDate, 
+        required: m.required !== false, // Default to true if not specified
+        active:true, 
+        addedAt: serverTimestamp() 
+      })
         .then(function(ref){
           return addDoc(collection(db, `${base}/timeline`), { date: todayStr(), type: 'medication', title: 'New Med: ' + m.name, detail: (m.dose || '') + ' ' + (m.frequency || ''), addedAt: serverTimestamp() })
             .then(function(){ return createMedicationReminders({ id: ref.id, ...m, active: true }); });
@@ -7560,7 +7582,31 @@ async function handleMedPhoto(input) {
   showToast('Reading prescription...');
   try {
     const base64NoPrefix = await compressReportImage(file);
-    const system = `Extract all medications from this prescription. Return a JSON array of objects: {name, dose, frequency, timing, durationDays, startDate, notes}. durationDays is a number if stated. startDate in YYYY-MM-DD if stated. Respond only in JSON.`;
+    const system = `Extract all medications from this prescription image (may be handwritten or printed).
+
+CRITICAL INSTRUCTIONS:
+1. Read carefully - handwritten prescriptions may be unclear
+2. Extract ONLY medications that are CURRENTLY prescribed (not past medications or status notes)
+3. Identify if medication is optional/as-needed (SOS, PRN, "if required", "when needed", etc.)
+
+Return JSON array: [{name, dose, frequency, timing, durationDays, startDate, notes, required}]
+
+FIELDS:
+- name: Medication name (generic or brand)
+- dose: Dosage (e.g., "500mg", "2 tablets")
+- frequency: How often (e.g., "twice daily", "3 times a day", "once daily")
+- timing: When to take (e.g., "morning", "after meals", "before bed")
+- durationDays: Number of days (if stated, otherwise null)
+- startDate: Start date in YYYY-MM-DD (if stated, otherwise null)
+- notes: Additional instructions
+- required: true if regular medication, false if optional/SOS/PRN/"as needed"/"when required"
+
+EXAMPLES OF OPTIONAL MEDICATIONS:
+- "SOS" or "PRN" or "if required" or "when needed" or "as needed"
+- Pain relievers marked for use "when pain"
+- Anti-nausea meds marked "if vomiting"
+
+Return ONLY the JSON array, no other text.`;
     const res = await callClaudeVision(system, "Extract medications", base64NoPrefix, LLM_MODELS.medicationParse);
     const meds = safeParseJSON(res);
     if(Array.isArray(meds) && meds.length) {
