@@ -4845,13 +4845,31 @@ function _renderHealthOverviewInner(el) {
 
   // Critical alert from most recent urgent report
   const urgentReport = activePatientData.reports.find(r => r.urgency === 'urgent');
-  const alertHtml = urgentReport ? `
-    <div class="health-alert-banner">
-      <div class="health-alert-icon">🚨</div>
-      <div class="health-alert-text"><strong>Attention needed:</strong> ${safeHtml(urgentReport.title)} — ${safeHtml(urgentReport.aiSummary?.slice(0,120))}...</div>
-    </div>` : '';
+  // Smart, actionable alerts
+  const alerts = [];
   
-  // Overdue required medications alert
+  // 1. Urgent report alert (expandable, clickable)
+  if (urgentReport) {
+    const fullSummary = urgentReport.aiSummary || urgentReport.title;
+    const isLong = fullSummary.length > 150;
+    const alertId = `alert-report-${urgentReport.id}`;
+    alerts.push({
+      id: alertId,
+      priority: 1,
+      icon: '🚨',
+      color: 'var(--red)',
+      bgColor: 'rgba(239,68,68,0.1)',
+      title: 'Attention needed',
+      message: fullSummary,
+      isLong,
+      actions: [
+        { label: 'View Report', action: `switchHealthTab('reports', document.querySelectorAll('#health-tabs .chip')[3]); setTimeout(() => document.querySelector('[data-report-id="${urgentReport.id}"]')?.scrollIntoView({behavior:'smooth',block:'center'}), 200)` },
+        { label: 'Dismiss', action: `dismissAlert('${alertId}')`, secondary: true }
+      ]
+    });
+  }
+  
+  // 2. Overdue medications alert (expandable, with quick actions)
   const now = new Date();
   const currentHour = now.getHours();
   const currentSlot = currentHour < 12 ? 'morning' : currentHour < 16 ? 'afternoon' : currentHour < 20 ? 'evening' : 'night';
@@ -4872,11 +4890,83 @@ function _renderHealthOverviewInner(el) {
     }
   });
   
-  const overdueHtml = overdueMeds.length ? `
-    <div class="health-alert-banner" style="background:rgba(244,132,95,0.1);border-color:var(--orange)">
-      <div class="health-alert-icon" style="color:var(--orange)">⏰</div>
-      <div class="health-alert-text"><strong>${overdueMeds.length} overdue medication(s):</strong> ${overdueMeds.slice(0,3).map(m => safeHtml(m.name)).join(', ')}${overdueMeds.length > 3 ? ' +' + (overdueMeds.length-3) + ' more' : ''}</div>
-    </div>` : '';
+  if (overdueMeds.length) {
+    const medsList = overdueMeds.map(m => `${m.name} (${m.slot})`).join(', ');
+    const alertId = `alert-overdue-meds`;
+    alerts.push({
+      id: alertId,
+      priority: 2,
+      icon: '⏰',
+      color: 'var(--orange)',
+      bgColor: 'rgba(244,132,95,0.1)',
+      title: `${overdueMeds.length} overdue medication${overdueMeds.length > 1 ? 's' : ''}`,
+      message: medsList,
+      isLong: medsList.length > 100,
+      actions: [
+        { label: 'View Medications', action: `switchHealthTab('meds', document.querySelectorAll('#health-tabs .chip')[2])` },
+        { label: 'Dismiss', action: `dismissAlert('${alertId}')`, secondary: true }
+      ]
+    });
+  }
+  
+  // 3. Upcoming visit reminder (if within 24 hours)
+  const upcomingVisit = activePatientData.visits
+    .filter(v => new Date(v.date) > now && new Date(v.date) - now < 86400000)
+    .sort((a,b) => new Date(a.date) - new Date(b.date))[0];
+  
+  if (upcomingVisit) {
+    const visitDate = new Date(upcomingVisit.date);
+    const hoursUntil = Math.round((visitDate - now) / 3600000);
+    const alertId = `alert-visit-${upcomingVisit.id}`;
+    alerts.push({
+      id: alertId,
+      priority: 3,
+      icon: '🏥',
+      color: 'var(--blue)',
+      bgColor: 'rgba(59,130,246,0.1)',
+      title: 'Upcoming visit',
+      message: `${upcomingVisit.doctor || 'Doctor visit'} in ${hoursUntil} hour${hoursUntil !== 1 ? 's' : ''} at ${upcomingVisit.hospital || 'hospital'}`,
+      isLong: false,
+      actions: [
+        { label: 'View Details', action: `switchHealthTab('visits', document.querySelectorAll('#health-tabs .chip')[4])` },
+        { label: 'Dismiss', action: `dismissAlert('${alertId}')`, secondary: true }
+      ]
+    });
+  }
+  
+  // Sort by priority and filter dismissed alerts
+  alerts.sort((a, b) => a.priority - b.priority);
+  const activeAlerts = alerts.filter(alert => !window._dismissedAlerts?.[alert.id]);
+  
+  const alertHtml = activeAlerts.map(alert => {
+    const isExpanded = window._expandedAlerts?.[alert.id] || false;
+    const displayMessage = alert.isLong && !isExpanded 
+      ? alert.message.slice(0, 150) + '...' 
+      : alert.message;
+    
+    return `
+      <div class="health-alert-banner" id="${alert.id}" style="background:${alert.bgColor};border-color:${alert.color};cursor:${alert.isLong ? 'pointer' : 'default'};transition:all 0.3s" onclick="${alert.isLong ? `toggleAlert('${alert.id}')` : ''}">
+        <div class="health-alert-icon" style="color:${alert.color}">${alert.icon}</div>
+        <div style="flex:1">
+          <div class="health-alert-text">
+            <strong>${alert.title}:</strong> ${safeHtml(displayMessage)}
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            ${alert.actions.map(action => `
+              <button class="btn-sm${action.secondary ? '' : ''}" 
+                      onclick="event.stopPropagation(); ${action.action}" 
+                      style="font-size:11px;padding:4px 10px;${action.secondary ? 'background:transparent;border:1px solid var(--gold-border);color:var(--text-dim)' : ''}">
+                ${action.label}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+        ${alert.isLong ? `<div style="font-size:18px;color:var(--text-faint);margin-left:8px">${isExpanded ? '▼' : '▶'}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+  
+  const overdueHtml = ''; // Removed old overdueHtml, now part of alerts
 
   // Care Summary — collapsible
   const summary = p.aiSummary || '';
@@ -5059,6 +5149,27 @@ function toggleHealthSummary() {
   body.classList.toggle('open', !isOpen);
   chevron.textContent = isOpen ? '›' : '⌃';
   teaser.style.display = isOpen ? '' : 'none';
+}
+
+// Alert management
+window._expandedAlerts = window._expandedAlerts || {};
+window._dismissedAlerts = window._dismissedAlerts || {};
+
+function toggleAlert(alertId) {
+  window._expandedAlerts[alertId] = !window._expandedAlerts[alertId];
+  renderHealthOverview(); // Re-render to show expanded/collapsed state
+}
+
+function dismissAlert(alertId) {
+  window._dismissedAlerts[alertId] = true;
+  const alertEl = document.getElementById(alertId);
+  if (alertEl) {
+    alertEl.style.opacity = '0';
+    alertEl.style.transform = 'translateX(-20px)';
+    setTimeout(() => {
+      alertEl.style.display = 'none';
+    }, 300);
+  }
 }
 
 async function renderHealthReports() {
@@ -8413,6 +8524,8 @@ window.startVoiceInputForChat = startVoiceInputForChat;
 window.useSuggestedPrompt = useSuggestedPrompt;
 window.clearChatHistory = clearChatHistory;
 window.toggleHealthSummary = toggleHealthSummary;
+window.toggleAlert = toggleAlert;
+window.dismissAlert = dismissAlert;
 window.safeHtml = safeHtml; // expose for any inline-onclick context
 window.canDeleteHealthData = canDeleteHealthData;
 window.renderSparkline = renderSparkline;
