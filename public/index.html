@@ -4188,28 +4188,55 @@ function renderHealthMeds() {
       </div>
     ` : ''}
 
-    <div class="health-card-title" style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Active Medications</div>
-    ${active.length ? active.map(m => {
-      const slots = buildMedSchedule([m]);
-      const slotLabels = Object.entries(slots).filter(([,meds])=>meds.length).map(([k])=>k).join(', ');
-      const dur = getMedDurationStatus(m);
-      const durLine = dur ? `Duration: ${dur.startDate} → ${dur.endDate} · ${dur.isExpired ? 'complete' : (dur.daysLeft + 1) + ' days left'}` : '';
-      const expiredNote = dur && dur.isExpired ? '<div style="font-size:11px;color:var(--orange);margin-top:6px">Duration complete — please confirm with doctor and stop.</div>' : '';
-      return `<div class="health-card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div style="flex:1;min-width:0">
-            <div class="health-card-title" style="color:var(--gold)">${safeHtml(m.name)}</div>
-            <div style="font-size:13px;font-weight:600;margin-top:2px">${safeHtml(m.dose)} · ${safeHtml(m.frequency)}</div>
-            ${m.timing ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px">${safeHtml(m.timing)}</div>` : ''}
-            ${slotLabels ? `<div style="font-size:10px;color:var(--gold);margin-top:4px;font-family:'DM Mono',monospace">${slotLabels}</div>` : ''}
-            ${durLine ? `<div style="font-size:10px;color:var(--text-faint);margin-top:6px">${safeHtml(durLine)}</div>` : ''}
-            ${expiredNote}
-          </div>
-          <button class="btn-sm" onclick="toggleMedActive('${m.id}', false)" style="margin-left:8px;flex-shrink:0">${dur && dur.isExpired ? 'Stop' : 'Stop'}</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="health-card-title" style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:0">Active Medications (${active.length})</div>
+      ${active.length > 3 ? '<button class="btn-sm" onclick="toggleMedListExpanded()" id="med-list-toggle">Show All</button>' : ''}
+    </div>
+    ${active.length ? `
+      <div class="health-card" style="padding:12px">
+        <div id="med-list-compact" style="display:block">
+          ${active.slice(0, 3).map(m => {
+            const dur = getMedDurationStatus(m);
+            const expiring = dur && !dur.isExpired && dur.daysLeft <= 3;
+            return `<div class="list-item" style="padding:10px 0;border-bottom:1px solid var(--gold-border);cursor:pointer" onclick="toggleMedDetails('${m.id}')">
+              <div class="list-icon" style="font-size:18px">💊</div>
+              <div class="list-info" style="flex:1">
+                <div class="list-name" style="font-size:13px">${safeHtml(m.name)}</div>
+                <div class="list-sub" style="font-size:11px">${safeHtml(m.dose)} · ${safeHtml(m.frequency)}</div>
+              </div>
+              ${expiring ? '<span style="font-size:9px;padding:2px 6px;background:var(--orange);color:var(--bg);border-radius:4px;font-weight:600">' + (dur.daysLeft + 1) + 'd left</span>' : ''}
+              <button class="edit-btn" onclick="event.stopPropagation();toggleMedActive('${m.id}', false)">✕</button>
+            </div>
+            <div id="med-details-${m.id}" style="display:none;padding:12px;background:var(--surface);border-radius:8px;margin:8px 0">
+              ${m.timing ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">Timing: ${safeHtml(m.timing)}</div>` : ''}
+              ${dur ? `<div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Duration: ${dur.startDate} → ${dur.endDate} ${dur.isExpired ? '(complete)' : '(' + (dur.daysLeft + 1) + ' days left)'}</div>` : ''}
+              ${m.notes ? `<div style="font-size:11px;color:var(--text-faint);margin-top:6px;padding-top:6px;border-top:1px solid var(--gold-border)">${safeHtml(m.notes)}</div>` : ''}
+            </div>`;
+          }).join('')}
+          ${active.length > 3 ? '<div style="text-align:center;padding:8px;color:var(--text-faint);font-size:11px">+ ' + (active.length - 3) + ' more medications</div>' : ''}
         </div>
-        ${m.notes ? `<div style="font-size:11px;color:var(--text-faint);margin-top:8px;padding-top:8px;border-top:1px solid var(--gold-border)">${safeHtml(m.notes)}</div>` : ''}
-      </div>`;
-    }).join('') : '<div style="font-size:12px;color:var(--text-faint);padding:16px 0">No active medications.</div>'}
+        <div id="med-list-full" style="display:none">
+          ${active.map(m => {
+            const dur = getMedDurationStatus(m);
+            const expiring = dur && !dur.isExpired && dur.daysLeft <= 3;
+            return `<div class="list-item" style="padding:10px 0;border-bottom:1px solid var(--gold-border);cursor:pointer" onclick="toggleMedDetails('${m.id}')">
+              <div class="list-icon" style="font-size:18px">💊</div>
+              <div class="list-info" style="flex:1">
+                <div class="list-name" style="font-size:13px">${safeHtml(m.name)}</div>
+                <div class="list-sub" style="font-size:11px">${safeHtml(m.dose)} · ${safeHtml(m.frequency)}</div>
+              </div>
+              ${expiring ? '<span style="font-size:9px;padding:2px 6px;background:var(--orange);color:var(--bg);border-radius:4px;font-weight:600">' + (dur.daysLeft + 1) + 'd left</span>' : ''}
+              <button class="edit-btn" onclick="event.stopPropagation();toggleMedActive('${m.id}', false)">✕</button>
+            </div>
+            <div id="med-details-${m.id}" style="display:none;padding:12px;background:var(--surface);border-radius:8px;margin:8px 0">
+              ${m.timing ? `<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">Timing: ${safeHtml(m.timing)}</div>` : ''}
+              ${dur ? `<div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">Duration: ${dur.startDate} → ${dur.endDate} ${dur.isExpired ? '(complete)' : '(' + (dur.daysLeft + 1) + ' days left)'}</div>` : ''}
+              ${m.notes ? `<div style="font-size:11px;color:var(--text-faint);margin-top:6px;padding-top:6px;border-top:1px solid var(--gold-border)">${safeHtml(m.notes)}</div>` : ''}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    ` : '<div style="font-size:12px;color:var(--text-faint);padding:16px 0">No active medications.</div>'}
 
     ${inactive.length ? `
       <div class="health-card-title" style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px">Stopped / Inactive</div>
@@ -5692,6 +5719,29 @@ async function toggleMedActive(id, active) {
   } catch(e) { console.error(e); }
 }
 
+function toggleMedListExpanded() {
+  const compact = document.getElementById('med-list-compact');
+  const full = document.getElementById('med-list-full');
+  const btn = document.getElementById('med-list-toggle');
+  if (!compact || !full || !btn) return;
+  
+  if (compact.style.display === 'none') {
+    compact.style.display = 'block';
+    full.style.display = 'none';
+    btn.textContent = 'Show All';
+  } else {
+    compact.style.display = 'none';
+    full.style.display = 'block';
+    btn.textContent = 'Show Less';
+  }
+}
+
+function toggleMedDetails(medId) {
+  const el = document.getElementById('med-details-' + medId);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
 async function saveVisit() {
   const date = document.getElementById('hv-date').value;
   const hospital = document.getElementById('hv-hospital').value.trim();
@@ -6999,6 +7049,8 @@ window.handleHealthReport = handleHealthReport;
 window.confirmSaveReport = confirmSaveReport;
 window.saveMedication = saveMedication;
 window.toggleMedActive = toggleMedActive;
+window.toggleMedListExpanded = toggleMedListExpanded;
+window.toggleMedDetails = toggleMedDetails;
 window.saveVisit = saveVisit;
 window.handleHealthBillPhoto = handleHealthBillPhoto;
 window.saveHealthBill = saveHealthBill;
