@@ -1714,6 +1714,97 @@ let pendingReport=null;
 let pendingVitalMeta=null;
 let pendingMedReview=[];
 
+// ══ APP MONITOR — crash reporting & action failure logging ═══════════
+const AppMonitor = (() => {
+  const V = '20260401';
+  const LS_KEY = '_fos_crash';
+  const MAX_BUF = 30;
+  let _buf = [];
+  let _flushTimer = null;
+  let _flushing = false;
+
+  function _ctx() {
+    try {
+      return {
+        scr: document.querySelector('.screen.active')?.id || '?',
+        pg: document.querySelector('.page.active')?.id || '?',
+        tab: typeof activeHealthTab !== 'undefined' ? activeHealthTab : null
+      };
+    } catch { return {}; }
+  }
+
+  function _dev() {
+    return {
+      ua: (navigator.userAgent || '').slice(0, 120),
+      vp: `${window.innerWidth}x${window.innerHeight}`,
+      net: navigator.onLine ? 'online' : 'offline'
+    };
+  }
+
+  function capture(type, msg, opts) {
+    opts = opts || {};
+    const entry = {
+      t: Date.now(), v: V, type: String(type),
+      msg: String(msg || '').slice(0, 400),
+      stack: String(opts.stack || '').slice(0, 800),
+      action: opts.action || null,
+      ctx: _ctx(), dev: _dev(),
+      uid: (typeof CU !== 'undefined' && CU?.uid) ? CU.uid.slice(0, 28) : null
+    };
+    _buf.push(entry);
+    if (_buf.length > MAX_BUF) _buf.shift();
+    try { localStorage.setItem(LS_KEY, JSON.stringify(_buf)); } catch {}
+    clearTimeout(_flushTimer);
+    _flushTimer = setTimeout(_flush, 3000);
+  }
+
+  async function _flush() {
+    if (_flushing || !_buf.length) return;
+    const fid = typeof FID !== 'undefined' ? FID : null;
+    if (!fid || typeof db === 'undefined') return;
+    _flushing = true;
+    const batch = _buf.splice(0);
+    try { localStorage.removeItem(LS_KEY); } catch {}
+    try {
+      await Promise.allSettled(batch.map(e =>
+        addDoc(collection(db, `families/${fid}/appLogs`), { ...e, flushedAt: serverTimestamp() })
+      ));
+    } catch (_) {}
+    _flushing = false;
+  }
+
+  function init() {
+    try {
+      const prev = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+      if (Array.isArray(prev) && prev.length) { _buf = prev.slice(-MAX_BUF); }
+    } catch {}
+
+    window.onerror = (msg, src, line, col, err) => {
+      capture('js_crash', msg, { stack: err?.stack || `${src}:${line}:${col}`, action: 'global' });
+    };
+
+    window.addEventListener('unhandledrejection', ev => {
+      const err = ev.reason;
+      capture('promise_rejection', err?.message || String(err), { stack: err?.stack || '', action: 'promise' });
+    });
+
+    window.addEventListener('offline', () =>
+      capture('network', 'App went offline', { action: 'connectivity' })
+    );
+  }
+
+  function logFailure(action, msg, err) {
+    capture('action_failure', msg, { stack: err?.stack || err?.message || String(err || ''), action });
+  }
+
+  function onAuthReady() { clearTimeout(_flushTimer); _flushTimer = setTimeout(_flush, 2000); }
+
+  return { init, capture, logFailure, onAuthReady };
+})();
+
+AppMonitor.init();
+// ════════════════════════════════════════════════════════════════════
+
 function clearEditMode(){ editMode=null; }
 
 // ── Visibility: primary sees all; secondary sees assigned to them OR sharedWithSecondary ──
@@ -1897,6 +1988,7 @@ onAuthStateChanged(auth,async user=>{
       }
       if(uDoc.exists()&&uDoc.data().familyId){
         FID=uDoc.data().familyId; myRole=uDoc.data().role||'primary';
+        AppMonitor.onAuthReady();
         // Check if we need PIN/biometric lock
         securityMode=LS.get('familyos_security')||'none';
         const sessionValid=LS.get('familyos_session');
@@ -1906,7 +1998,7 @@ onAuthStateChanged(auth,async user=>{
           await loadAndSubscribe();
         }
       } else { showScreen('scr-setup'); }
-    }catch(e){ console.error(e); showScreen('scr-setup'); }
+    }catch(e){ AppMonitor.logFailure('auth_flow', e.message, e); console.error(e); showScreen('scr-setup'); }
   } else {
     const pendingInvite=LS.get('pending_invite');
     if(pendingInvite){
@@ -3728,6 +3820,7 @@ function renderHealthOverview() {
   try { _renderHealthOverviewInner(el); }
   catch(err) {
     console.error('renderHealthOverview error:', err);
+    AppMonitor.logFailure('health_overview_render', err.message, err);
     if(el) el.innerHTML = `<div style="padding:20px;color:var(--red);font-size:13px">⚠️ Overview failed to load: ${err.message}<br><small>Please refresh the page.</small></div>`;
   }
 }
@@ -3767,12 +3860,13 @@ function _renderHealthOverviewInner(el) {
       </div>
     </div>`;
 
-  // Key markers from all reports
+  // Key markers from all reports — label adapts to condition
   const markers = getKeyMarkers(activePatientData.reports, p.trackedMarkers);
+  const markerSectionLabel = getConditionMarkerLabel(p.diagnosis);
   const markersHtml = `
     <div class="health-card" style="margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div class="health-card-title">🧬 Key Markers</div>
+        <div class="health-card-title">${safeHtml(markerSectionLabel)}</div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn-sm" onclick="openMarkerListModal()">View all</button>
           <button class="btn-sm" onclick="openMarkerConfigModal()">Customize markers →</button>
@@ -4620,7 +4714,9 @@ Formatting rules:
   if (!response.ok) {
     const err = await response.json();
     console.error('Claude API error:', err);
-    throw new Error(`API error ${response.status}: ${err.error?.message || 'Unknown'}`);
+    const errMsg = `API error ${response.status}: ${err.error?.message || 'Unknown'}`;
+    AppMonitor.logFailure('claude_health', errMsg, { message: errMsg });
+    throw new Error(errMsg);
   }
 
   const resData = await response.json();
@@ -4778,6 +4874,19 @@ function sortReportsNewest(reports){
 }
 
 // Extract key markers from all reports' keyFindings
+function getConditionMarkerLabel(diagnosis) {
+  const d = (diagnosis || '').toLowerCase();
+  if (/cancer|tumor|carcinoma|lymphoma|leukemia|oncol/i.test(d)) return '🧬 Cancer Markers';
+  if (/heart|cardiac|coronary|cad|angina|ecg/i.test(d)) return '❤️ Cardiac Markers';
+  if (/diabet|hba1c|glucose|insulin/i.test(d)) return '🩸 Diabetes Markers';
+  if (/kidney|renal|nephro|ckd|creatinine/i.test(d)) return '🫘 Kidney Markers';
+  if (/thyroid|tsh|t3|t4|hypothyroid|hyperthyroid/i.test(d)) return '🦋 Thyroid Markers';
+  if (/liver|hepat|cirrhosis|jaundice|bilirubin/i.test(d)) return '🫀 Liver Markers';
+  if (/lung|pulmo|copd|asthma|pneumon/i.test(d)) return '🫁 Pulmonary Markers';
+  if (/anemia|anaemia|haemoglobin|hemoglobin/i.test(d)) return '🩸 Blood Markers';
+  return '🧬 Key Lab Markers';
+}
+
 function getKeyMarkers(reports, trackedMarkers) {
   const baseList = Array.isArray(trackedMarkers) && trackedMarkers.length ? trackedMarkers : DEFAULT_MARKERS;
   const targetMarkers = baseList.map(m => String(m).toLowerCase().trim());
@@ -5200,6 +5309,7 @@ Respond with JSON only. No markdown. No explanation.`;
     renderPendingReportPreview(reportData);
   } catch(e) { 
     console.error('handleHealthReport exception:', e);
+    AppMonitor.logFailure('report_upload', e.message, e);
     const status = e.message.match(/API error (\d+)/)?.[1];
     if (status === '400') showToast('Image too large or wrong format — try again');
     else if (status === '401') showToast('API key error — check settings');
@@ -5311,7 +5421,9 @@ async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODE
   if (!response.ok) {
     const err = await response.json();
     console.error('Claude API error:', err);
-    throw new Error(`API error ${response.status}: ${err.error?.message || 'Unknown'}`);
+    const errMsg = `API error ${response.status}: ${err.error?.message || 'Unknown'}`;
+    AppMonitor.logFailure('claude_vision', errMsg, { message: errMsg });
+    throw new Error(errMsg);
   }
   const data = await response.json();
   return data.content[0].text;
@@ -5558,7 +5670,7 @@ async function handleMedPhoto(input) {
       document.getElementById('hm-start').value = meds.startDate || '';
       document.getElementById('hm-notes').value = meds.notes || '';
     }
-  } catch(e) { console.error(e); showToast('Prescription reading failed'); }
+  } catch(e) { AppMonitor.logFailure('med_photo_parse', e.message, e); console.error(e); showToast('Prescription reading failed'); }
 }
 // ══ END HEALTH LOGIC ══
 
