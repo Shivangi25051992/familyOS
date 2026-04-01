@@ -2598,19 +2598,31 @@ function subscribeData(){
   });
   
   // Subscribe to health profiles shared with this user (collection group query)
-  const u6=onSnapshot(query(collectionGroup(db,'healthProfiles'),where('sharedWith','array-contains',CU.uid)),s=>{
-    const sharedProfiles = s.docs.map(d=>{
-      // Extract family ID from document path: families/{familyId}/healthProfiles/{profileId}
-      const pathParts = d.ref.path.split('/');
-      const familyId = pathParts[1];
-      return {id:d.id,...d.data(),familyId};
-    });
-    data.sharedHealthProfiles = sharedProfiles;
-    // Merge with own profiles
-    const ownProfiles = data.healthProfiles?.filter(p => p.familyId === FID) || [];
-    data.healthProfiles = [...ownProfiles, ...sharedProfiles];
-    renderHealthProfiles();
-  });
+  const u6=onSnapshot(
+    query(collectionGroup(db,'healthProfiles'),where('sharedWith','array-contains',CU.uid)),
+    s=>{
+      console.log('📊 Shared profiles query result:', s.docs.length, 'profiles found');
+      const sharedProfiles = s.docs.map(d=>{
+        // Extract family ID from document path: families/{familyId}/healthProfiles/{profileId}
+        const pathParts = d.ref.path.split('/');
+        const familyId = pathParts[1];
+        const profile = {id:d.id,...d.data(),familyId};
+        console.log('  - Shared profile:', profile.name, 'from family:', familyId);
+        return profile;
+      });
+      data.sharedHealthProfiles = sharedProfiles;
+      // Merge with own profiles
+      const ownProfiles = data.healthProfiles?.filter(p => p.familyId === FID) || [];
+      data.healthProfiles = [...ownProfiles, ...sharedProfiles];
+      console.log('📋 Total profiles after merge:', data.healthProfiles.length, '(own:', ownProfiles.length, ', shared:', sharedProfiles.length, ')');
+      renderHealthProfiles();
+    },
+    err => {
+      console.error('❌ Shared profiles query error:', err);
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+    }
+  );
   
   unsubs=[u0,u1,u2,u3,u4,u5,u6];
 }

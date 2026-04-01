@@ -44,9 +44,18 @@ service cloud.firestore {
       }
 
       match /healthProfiles/{profileId} {
-        allow read, write: if isFamilyMember(familyId);
+        // Allow read if user is family member OR if profile is shared with them
+        allow read: if isFamilyMember(familyId) 
+          || (request.auth != null && request.auth.uid in resource.data.get('sharedWith', []));
+        // Only family members can write
+        allow write: if isFamilyMember(familyId);
+        
         match /{subcollection}/{doc} {
-          allow read, write: if isFamilyMember(familyId);
+          // Allow read if user is family member OR if parent profile is shared with them
+          allow read: if isFamilyMember(familyId) 
+            || (request.auth != null && request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)/healthProfiles/$(profileId)).data.get('sharedWith', []));
+          // Only family members can write
+          allow write: if isFamilyMember(familyId);
         }
       }
     }
