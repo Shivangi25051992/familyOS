@@ -6926,6 +6926,43 @@ async function compressReportImage(file) {
   });
 }
 
+async function convertPDFToImage(file) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // Load PDF.js library if not already loaded
+      if (!window.pdfjsLib) {
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.onload = () => {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        };
+        document.head.appendChild(script);
+        await new Promise(r => script.onload = r);
+      }
+      
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const page = await pdf.getPage(1); // First page only
+      
+      const viewport = page.getViewport({ scale: 2.0 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      
+      await page.render({
+        canvasContext: canvas.getContext('2d'),
+        viewport: viewport
+      }).promise;
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      resolve(dataUrl.split(',')[1]);
+    } catch(e) {
+      console.error('PDF conversion failed:', e);
+      reject(e);
+    }
+  });
+}
+
 function startVoiceInput(targetInputId, onResult) {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
     showToast('Voice input not supported on this browser');
@@ -6946,29 +6983,69 @@ function startVoiceInput(targetInputId, onResult) {
 async function handleHealthReport(input) {
   const file = input.files[0]; if(!file) return;
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  
+  // Show loading indicator
+  const uploadDiv = document.getElementById('health-report-upload');
+  if (uploadDiv) {
+    uploadDiv.innerHTML = `
+      <div style="text-align:center;padding:60px 20px">
+        <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">Reading Report...</div>
+        <div style="font-size:11px;color:var(--text-faint)">AI is analyzing the document (10-15 seconds)</div>
+      </div>
+    `;
+  }
   showToast('Reading report... this takes 10-15 seconds');
   
   try {
-    const base64NoPrefix = await compressReportImage(file);
+    // Check if PDF or image
+    const isPDF = file.type === 'application/pdf';
+    let base64NoPrefix;
+    
+    if (isPDF) {
+      // For PDFs, convert first page to image
+      showToast('Converting PDF to image...');
+      base64NoPrefix = await convertPDFToImage(file);
+    } else {
+      base64NoPrefix = await compressReportImage(file);
+    }
+    
     const system = `You are a medical report interpreter for family caregivers in India. Explain medical reports in simple, clear language that a non-medical person can understand. Be compassionate and clear. Respond only in JSON.`;
-    const prompt = `Analyse this medical report for a patient with ${p.diagnosis}. Return JSON only:
+    const prompt = `Analyse this medical report for a patient with ${p.diagnosis}. 
+
+CRITICAL INSTRUCTIONS:
+1. Extract the REPORT DATE carefully (look for "Date:", "Report Date:", date stamps)
+2. Today's date is ${new Date().toISOString().split('T')[0]} - use this to validate dates
+3. If year is unclear, prefer recent years (2024-2026) over old years (2018-2020)
+4. Do NOT confuse treatment dates with report dates
+5. Be precise about what the report says vs what it implies
+
+Return JSON only:
 {
-  "title": "report type",
-  "date": "YYYY-MM-DD or null",
-  "summary": "plain English explanation 3-5 sentences",
+  "title": "report type (e.g., CBC Panel, CT Scan, Chemotherapy Plan)",
+  "date": "YYYY-MM-DD (report date, not treatment date) or null if unclear",
+  "summary": "plain English explanation 3-5 sentences - what this report says NOW",
   "keyFindings": [
     {
-      "name": "test name",
-      "value": "result",
-      "unit": "unit",
-      "normalRange": "range",
+      "name": "test name or parameter",
+      "value": "result value",
+      "unit": "unit of measurement",
+      "normalRange": "normal range if stated",
       "flag": "normal|low|high|critical",
-      "plainExplanation": "one sentence"
+      "plainExplanation": "one sentence in simple language"
     }
   ],
-  "actionItems": ["string"],
-  "urgency": "routine|watch|urgent"
+  "actionItems": ["specific actions recommended in report"],
+  "urgency": "routine|watch|urgent",
+  "nextVisit": "YYYY-MM-DD if future appointment mentioned, else null"
 }
+
+IMPORTANT:
+- summary should reflect what the report CURRENTLY says
+- Do NOT add assumptions about treatment progress
+- If report says "plan for chemotherapy", don't say "patient is doing well with chemo"
+- Extract nextVisit ONLY if a future date is explicitly mentioned
+
 Respond with JSON only. No markdown. No explanation.`;
     
     const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalReports);
@@ -6996,6 +7073,12 @@ Respond with JSON only. No markdown. No explanation.`;
     else if (status === '401') showToast('API key error — check settings');
     else if (status === '529') showToast('AI service busy — try in 30 seconds');
     else showToast('Connection error — check internet and try again');
+    
+    // Reset UI on error
+    resetReportModal();
+  } finally {
+    // Reset file input
+    input.value = '';
   }
 }
 
@@ -7056,10 +7139,44 @@ async function confirmSaveReport() {
   isSavingReport = true;
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+    const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+    
+    // Save report
     await addDoc(collection(db, `${base}/reports`), { ...r, addedAt: serverTimestamp() });
     await addDoc(collection(db, `${base}/timeline`), { date: r.date || todayStr(), type: 'report', title: r.title, detail: r.aiSummary || r.summary, addedAt: serverTimestamp() });
+    
+    // Create visit if nextVisit is a future date
+    if (r.nextVisit) {
+      const visitDate = new Date(r.nextVisit);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (visitDate > today) {
+        console.log('📅 Creating visit for future date:', r.nextVisit);
+        await addDoc(collection(db, `${base}/visits`), {
+          date: r.nextVisit,
+          doctor: p.doctor || 'Doctor',
+          hospital: p.hospital || 'Hospital',
+          notes: `Follow-up visit (from ${r.title})`,
+          addedAt: serverTimestamp()
+        });
+        await addDoc(collection(db, `${base}/timeline`), {
+          date: r.nextVisit,
+          type: 'visit',
+          title: 'Scheduled Visit',
+          detail: `Follow-up for ${r.title}`,
+          addedAt: serverTimestamp()
+        });
+        showToast('Report saved ✓ Visit scheduled for ' + r.nextVisit);
+      } else {
+        console.log('⏭️ Skipping visit creation - date is not in future:', r.nextVisit);
+        showToast('Report saved ✓');
+      }
+    } else {
+      showToast('Report saved ✓');
+    }
+    
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummaryStale: true, updatedAt: serverTimestamp() });
-    showToast('Report saved ✓');
     closeModal('modal-health-report');
     pendingReport = null;
     window._pendingReport = null;
@@ -7579,7 +7696,21 @@ window.saveAllMedsFromReview = async function(){
 
 async function handleMedPhoto(input) {
   const file = input.files[0]; if(!file) return;
+  
+  // Show loading indicator in modal
+  const singleFields = document.getElementById('med-single-fields');
+  const reviewWrap = document.getElementById('med-review-wrap');
+  if (singleFields) {
+    singleFields.innerHTML = `
+      <div style="text-align:center;padding:60px 20px">
+        <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">Reading Prescription...</div>
+        <div style="font-size:11px;color:var(--text-faint)">AI is extracting medications (5-10 seconds)</div>
+      </div>
+    `;
+  }
   showToast('Reading prescription...');
+  
   try {
     const base64NoPrefix = await compressReportImage(file);
     const system = `Extract all medications from this prescription image (may be handwritten or printed).
@@ -7622,7 +7753,16 @@ Return ONLY the JSON array, no other text.`;
       document.getElementById('hm-start').value = meds.startDate || '';
       document.getElementById('hm-notes').value = meds.notes || '';
     }
-  } catch(e) { AppMonitor.logFailure('med_photo_parse', e.message, e); console.error(e); showToast('Prescription reading failed'); }
+  } catch(e) { 
+    AppMonitor.logFailure('med_photo_parse', e.message, e); 
+    console.error(e); 
+    showToast('Prescription reading failed');
+    // Reset UI on error
+    clearMedReview();
+  } finally {
+    // Reset file input
+    input.value = '';
+  }
 }
 // ══ END HEALTH LOGIC ══
 
