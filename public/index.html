@@ -1527,6 +1527,62 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     </div>
     
     <div class="form-group">
+      <label class="form-label">What to Share</label>
+      <div style="background:var(--surface);border:1px solid var(--gold-border);border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;color:var(--text-faint);margin-bottom:10px">Select which sections to share (read-only access):</div>
+        <label style="display:flex;align-items:center;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='var(--gold-soft)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" id="share-perm-overview" checked style="margin-right:10px;width:16px;height:16px;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">📊 Overview</div>
+            <div style="font-size:10px;color:var(--text-faint)">Patient info, diagnosis, timeline</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='var(--gold-soft)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" id="share-perm-reports" checked style="margin-right:10px;width:16px;height:16px;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">📄 Reports</div>
+            <div style="font-size:10px;color:var(--text-faint)">Medical reports, test results</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='var(--gold-soft)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" id="share-perm-medications" checked style="margin-right:10px;width:16px;height:16px;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">💊 Medications</div>
+            <div style="font-size:10px;color:var(--text-faint)">Prescriptions, dosage schedules</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='var(--gold-soft)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" id="share-perm-vitals" checked style="margin-right:10px;width:16px;height:16px;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">❤️ Vitals</div>
+            <div style="font-size:10px;color:var(--text-faint)">Temperature, BP, weight, etc.</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='var(--gold-soft)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" id="share-perm-bills" style="margin-right:10px;width:16px;height:16px;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">💰 Bills</div>
+            <div style="font-size:10px;color:var(--text-faint)">Medical expenses, invoices</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='var(--gold-soft)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" id="share-perm-visits" checked style="margin-right:10px;width:16px;height:16px;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">🏥 Visits</div>
+            <div style="font-size:10px;color:var(--text-faint)">Doctor appointments, visit history</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:center;padding:8px;cursor:pointer;border-radius:6px;transition:background 0.2s" onmouseover="this.style.background='var(--gold-soft)'" onmouseout="this.style.background='transparent'">
+          <input type="checkbox" id="share-perm-chat" checked style="margin-right:10px;width:16px;height:16px;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:500">💬 AI Chat</div>
+            <div style="font-size:10px;color:var(--text-faint)">Ask AI questions about health data</div>
+          </div>
+        </label>
+      </div>
+    </div>
+    
+    <div class="form-group">
       <label class="form-label">Access Duration</label>
       <select class="form-select" id="share-duration">
         <option value="7">7 days</option>
@@ -1540,8 +1596,8 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     <div style="background:var(--gold-soft);border:1px solid var(--gold-border);border-radius:8px;padding:12px;margin-bottom:16px">
       <div style="font-size:11px;font-weight:600;margin-bottom:6px">✓ Recipient can:</div>
       <div style="font-size:11px;color:var(--text-dim)">
-        • View all reports, medications, vitals, bills, visits<br>
-        • Use AI chat to ask questions<br>
+        • View selected sections (read-only)<br>
+        • Use AI chat (if enabled)<br>
         • Export PDF for doctor
       </div>
       <div style="font-size:11px;font-weight:600;margin:10px 0 6px">✕ Recipient cannot:</div>
@@ -4235,14 +4291,45 @@ async function loadExistingShares() {
         const expiresAt = shareDoc?.expiresAt;
         const expiresDate = expiresAt ? new Date(expiresAt).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}) : 'Never';
         
+        // Get permissions
+        const perms = shareDoc?.permissions || {
+          overview: true,
+          reports: true,
+          medications: true,
+          vitals: true,
+          bills: true,
+          visits: true,
+          chat: true
+        };
+        
+        const permIcons = {
+          overview: '📊',
+          reports: '📄',
+          medications: '💊',
+          vitals: '❤️',
+          bills: '💰',
+          visits: '🏥',
+          chat: '💬'
+        };
+        
+        const enabledPerms = Object.entries(perms)
+          .filter(([k, v]) => v)
+          .map(([k]) => permIcons[k] || k)
+          .join(' ');
+        
         return `
-          <div class="list-item" style="margin-bottom:8px">
-            <div class="list-icon">👤</div>
-            <div class="list-info">
-              <div class="list-name">${safeHtml(displayName)}</div>
-              <div class="list-sub">${typeLabel} · Expires: ${expiresDate}</div>
+          <div class="list-item" style="margin-bottom:8px;flex-direction:column;align-items:flex-start">
+            <div style="display:flex;width:100%;align-items:center">
+              <div class="list-icon">👤</div>
+              <div class="list-info" style="flex:1">
+                <div class="list-name">${safeHtml(displayName)}</div>
+                <div class="list-sub">${typeLabel} · Expires: ${expiresDate}</div>
+              </div>
+              <button class="edit-btn" onclick="revokeHealthAccess('${uid}')">Revoke</button>
             </div>
-            <button class="edit-btn" onclick="revokeHealthAccess('${uid}')">Revoke</button>
+            <div style="margin-left:44px;margin-top:6px;font-size:10px;color:var(--text-faint)">
+              Access: ${enabledPerms}
+            </div>
           </div>
         `;
       }).join('')}
@@ -4375,6 +4462,26 @@ async function shareHealthRecord() {
     return;
   }
   
+  // Capture granular permissions
+  const permissions = {
+    overview: document.getElementById('share-perm-overview').checked,
+    reports: document.getElementById('share-perm-reports').checked,
+    medications: document.getElementById('share-perm-medications').checked,
+    vitals: document.getElementById('share-perm-vitals').checked,
+    bills: document.getElementById('share-perm-bills').checked,
+    visits: document.getElementById('share-perm-visits').checked,
+    chat: document.getElementById('share-perm-chat').checked
+  };
+  
+  // Validate: at least one permission must be selected
+  const hasAnyPermission = Object.values(permissions).some(v => v);
+  if (!hasAnyPermission) {
+    showToast('Please select at least one section to share');
+    return;
+  }
+  
+  console.log('📋 Permissions:', permissions);
+  
   try {
     const expiresAt = durationDays > 0 ? Date.now() + (durationDays * 86400000) : null;
     const sharedWith = p.sharedWith || [];
@@ -4394,7 +4501,8 @@ async function shareHealthRecord() {
       grantedAt: Date.now(),
       grantedBy: CU.uid,
       expiresAt,
-      shareType
+      shareType,
+      permissions  // Add granular permissions
     };
     
     if (existingIdx >= 0) {
@@ -4409,7 +4517,8 @@ async function shareHealthRecord() {
       updatedAt: serverTimestamp()
     });
     
-    showToast(`✓ Shared with ${recipientName || recipientEmail}`);
+    const sharedSections = Object.entries(permissions).filter(([k,v]) => v).map(([k]) => k).join(', ');
+    showToast(`✓ Shared ${sharedSections} with ${recipientName || recipientEmail}`);
     
     // Clear inputs
     document.getElementById('share-email-input').value = '';
@@ -4527,6 +4636,23 @@ async function openPatientDashboard(id) {
   // Check if this is a shared profile (user has read-only access)
   window._isSharedHealthProfile = p.sharedWith && p.sharedWith.includes(CU.uid);
   
+  // Get permissions for shared profile
+  if (window._isSharedHealthProfile) {
+    const shareDoc = p.shareDetails?.find(s => s.uid === CU.uid);
+    window._sharedHealthPermissions = shareDoc?.permissions || {
+      overview: true,
+      reports: true,
+      medications: true,
+      vitals: true,
+      bills: true,
+      visits: true,
+      chat: true
+    };
+    console.log('📋 Shared profile permissions:', window._sharedHealthPermissions);
+  } else {
+    window._sharedHealthPermissions = null;
+  }
+  
   // Show share button for profile owner
   const shareBtn = document.getElementById('health-patient-share-btn');
   if (shareBtn) {
@@ -4542,8 +4668,52 @@ async function openPatientDashboard(id) {
   document.getElementById('health-profiles-view').style.display = 'none';
   document.getElementById('health-patient-view').style.display = 'block';
   
+  // Update tab visibility based on permissions
+  updateHealthTabsVisibility();
+  
   switchHealthTab('overview', document.querySelector('#health-tabs .chip'));
   subscribeActivePatient();
+}
+
+// Helper function to check if user has permission for a section
+function hasHealthPermission(section) {
+  if (!window._isSharedHealthProfile) return true; // Owner has all permissions
+  if (!window._sharedHealthPermissions) return true; // Fallback to allow all
+  return window._sharedHealthPermissions[section] === true;
+}
+
+// Update tab visibility based on permissions
+function updateHealthTabsVisibility() {
+  const tabsContainer = document.getElementById('health-tabs');
+  if (!tabsContainer) return;
+  
+  const tabs = tabsContainer.querySelectorAll('.chip');
+  const tabMap = {
+    0: 'overview',
+    1: 'vitals',
+    2: 'medications',
+    3: 'reports',
+    4: 'visits',
+    5: 'bills',
+    6: 'chat'
+  };
+  
+  tabs.forEach((tab, index) => {
+    const section = tabMap[index];
+    if (section && !hasHealthPermission(section)) {
+      tab.style.display = 'none';
+    } else {
+      tab.style.display = 'inline-block';
+    }
+  });
+  
+  // If current tab is hidden, switch to first visible tab
+  if (!hasHealthPermission(activeHealthTab)) {
+    const firstVisibleTab = tabs[0]; // Overview is always visible
+    if (firstVisibleTab) {
+      switchHealthTab('overview', firstVisibleTab);
+    }
+  }
 }
 
 let _renderHealthDebounceTimer = null;
@@ -4633,6 +4803,24 @@ function switchHealthTab(tab, btn) {
 
 function renderHealthTab() {
   if(!activeHealthProfileId) return;
+  
+  // Check permission for current tab
+  if (!hasHealthPermission(activeHealthTab)) {
+    const container = document.getElementById(`health-tab-${activeHealthTab}`);
+    if (container) {
+      container.innerHTML = `
+        <div class="empty" style="padding:60px 20px">
+          <div class="empty-icon">🔒</div>
+          <div class="empty-text">No Access</div>
+          <div style="font-size:12px;color:var(--text-faint);margin-top:8px">
+            You don't have permission to view this section
+          </div>
+        </div>
+      `;
+    }
+    return;
+  }
+  
   if(activeHealthTab === 'overview') renderHealthOverview();
   else if(activeHealthTab === 'vitals') renderHealthVitals();
   else if(activeHealthTab === 'reports') renderHealthReports();
