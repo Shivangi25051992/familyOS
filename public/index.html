@@ -3975,11 +3975,11 @@ function _renderHealthOverviewInner(el) {
   const currentSlot = currentHour < 12 ? 'morning' : currentHour < 16 ? 'afternoon' : currentHour < 20 ? 'evening' : 'night';
   const slotOrder = { morning: 0, afternoon: 1, evening: 2, night: 3 };
   const activeMedsForOverdue = activePatientData.medications.filter(m => m.active !== false && m.required !== false);
-  const schedule = buildMedSchedule(activeMedsForOverdue);
+  const overdueSchedule = buildMedSchedule(activeMedsForOverdue);
   const todayDosesForOverdue = activePatientData.doseLogs;
   const overdueMeds = [];
   
-  Object.entries(schedule).forEach(([slot, meds]) => {
+  Object.entries(overdueSchedule).forEach(([slot, meds]) => {
     if (slotOrder[slot] < slotOrder[currentSlot]) {
       meds.forEach(m => {
         const doseLog = todayDosesForOverdue.find(d => d.medicationId === m.id && d.slot === slot);
