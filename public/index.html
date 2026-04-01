@@ -2106,6 +2106,19 @@ onAuthStateChanged(auth,async user=>{
   clearTimeout(authTimeout);
   if(user){
     CU=user;
+    
+    // Show console welcome message
+    console.log('\n═══════════════════════════════════════════════════');
+    console.log('👋 Welcome to FamilyOS!');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('User:', user.displayName || user.email);
+    console.log('User ID:', user.uid);
+    console.log('═══════════════════════════════════════════════════');
+    console.log('💡 Helpful Commands:');
+    console.log('  copyMyUserId()  - Copy your User ID to share with others');
+    console.log('  howToShare()    - Show instructions for sharing health records');
+    console.log('═══════════════════════════════════════════════════\n');
+    
     await getRedirectResult(auth).catch(e=>{ if(e?.code) console.error('Redirect sign-in error:',e); });
     // After OAuth redirect (e.g. gmailConnected), give auth time to propagate to Firestore client
     if(new URLSearchParams(location.search).get('gmailConnected')||new URLSearchParams(location.search).get('gmailError')){
@@ -3908,21 +3921,52 @@ function switchShareType(type) {
 // Helper to copy User ID to clipboard
 async function copyMyUserId() {
   if (!CU || !CU.uid) {
+    console.error('❌ Not logged in');
     showToast('Not logged in');
     return;
   }
   
+  console.log('\n═══════════════════════════════════════════════════');
+  console.log('📋 YOUR FAMILYOS USER ID');
+  console.log('═══════════════════════════════════════════════════');
+  console.log('User ID:', CU.uid);
+  console.log('Email:', CU.email);
+  console.log('Name:', CU.displayName || 'Not set');
+  console.log('═══════════════════════════════════════════════════');
+  console.log('💡 Share this User ID with others so they can share health records with you');
+  console.log('═══════════════════════════════════════════════════\n');
+  
   try {
     await navigator.clipboard.writeText(CU.uid);
     showToast(`✓ User ID copied: ${CU.uid.substring(0, 8)}...`);
-    console.log('📋 Your User ID:', CU.uid);
-    console.log('Share this ID with others so they can share health records with you');
   } catch(e) {
     // Fallback if clipboard API fails
     const msg = `Your User ID: ${CU.uid}\n\nShare this with others to receive health records.`;
     alert(msg);
-    console.log('📋 Your User ID:', CU.uid);
   }
+}
+
+// Helper to show sharing instructions
+function howToShare() {
+  console.log('\n═══════════════════════════════════════════════════');
+  console.log('📖 HOW TO SHARE HEALTH RECORDS');
+  console.log('═══════════════════════════════════════════════════');
+  console.log('');
+  console.log('STEP 1: Get Recipient\'s User ID');
+  console.log('  Ask them to run: copyMyUserId()');
+  console.log('  They will see their User ID in console');
+  console.log('');
+  console.log('STEP 2: Share the Record');
+  console.log('  1. Click 🔗 Share button on health profile');
+  console.log('  2. Click "Any User (Email)" tab');
+  console.log('  3. Paste their User ID');
+  console.log('  4. Click "Share Record"');
+  console.log('');
+  console.log('STEP 3: Recipient Access');
+  console.log('  The profile will appear in their "Shared With You" section');
+  console.log('  They will have read-only access');
+  console.log('');
+  console.log('═══════════════════════════════════════════════════\n');
 }
 
 async function openShareHealthModal() {
@@ -4045,7 +4089,14 @@ async function shareHealthRecord() {
   } else {
     // Email or UID-based sharing (any FamilyOS user)
     const input = document.getElementById('share-email-input').value.trim();
+    
+    console.log('\n═══════════════════════════════════════════════════');
+    console.log('🔗 SHARING HEALTH RECORD');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Input:', input);
+    
     if (!input) {
+      console.error('❌ No input provided');
       showToast('Please enter an email or User ID');
       return;
     }
@@ -4054,14 +4105,21 @@ async function shareHealthRecord() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const isEmail = emailRegex.test(input);
     
+    console.log('Input type:', isEmail ? 'Email' : 'User ID');
+    
     if (isEmail) {
       // Try email lookup (may fail due to permissions)
+      console.log('🔍 Attempting email lookup...');
       try {
         showToast('Looking up user by email...');
         const usersQuery = query(collection(db, 'users'), where('email', '==', input.toLowerCase()));
         const usersSnapshot = await getDocs(usersQuery);
         
+        console.log('Query results:', usersSnapshot.size, 'users found');
+        
         if (usersSnapshot.empty) {
+          console.error('❌ No user found with email:', input);
+          console.log('💡 TIP: Ask recipient to run copyMyUserId() and share their User ID instead');
           showToast('User not found. Try asking them for their User ID instead.');
           return;
         }
@@ -4071,34 +4129,54 @@ async function shareHealthRecord() {
         recipientName = userDoc.data().name || userDoc.data().email;
         recipientEmail = input.toLowerCase();
         
+        console.log('✅ User found:', { uid: recipientUid, name: recipientName, email: recipientEmail });
+        
       } catch(e) {
-        console.error('Error looking up user by email:', e);
-        showToast('Cannot lookup by email. Please use User ID instead (ask recipient to share their User ID from Settings)');
+        console.error('❌ Email lookup failed:', e);
+        console.error('Error details:', e.message);
+        console.log('═══════════════════════════════════════════════════');
+        console.log('💡 SOLUTION: Use User ID instead of email');
+        console.log('═══════════════════════════════════════════════════');
+        console.log('1. Ask recipient to open console (F12)');
+        console.log('2. Ask them to run: copyMyUserId()');
+        console.log('3. They will see their User ID');
+        console.log('4. Paste their User ID here instead of email');
+        console.log('═══════════════════════════════════════════════════\n');
+        showToast('Cannot lookup by email. Please use User ID instead');
         return;
       }
     } else {
       // Assume it's a User ID
+      console.log('📋 Using User ID directly:', input);
       recipientUid = input;
       
       // Try to get user info (optional, may fail)
       try {
+        console.log('🔍 Verifying User ID...');
         showToast('Verifying User ID...');
         const userDoc = await getDoc(doc(db, 'users', recipientUid));
+        
         if (userDoc.exists()) {
           recipientName = userDoc.data().name || userDoc.data().email || 'Unknown User';
           recipientEmail = userDoc.data().email;
+          console.log('✅ User verified:', { uid: recipientUid, name: recipientName, email: recipientEmail });
         } else {
-          // User ID doesn't exist
+          console.error('❌ User ID not found in database:', recipientUid);
+          console.log('💡 Make sure the User ID is correct (ask recipient to run copyMyUserId())');
           showToast('Invalid User ID. Please check and try again.');
           return;
         }
       } catch(e) {
-        console.error('Error verifying user:', e);
+        console.warn('⚠️ Cannot verify user (permission issue):', e.message);
+        console.log('Proceeding anyway - user might exist but we cannot read their data');
         // If we can't verify, proceed anyway (user might exist but we don't have read permission)
         recipientName = 'User ' + recipientUid.substring(0, 8);
         recipientEmail = null;
+        console.log('Using fallback name:', recipientName);
       }
     }
+    
+    console.log('═══════════════════════════════════════════════════\n');
   }
   
   // Prevent sharing with yourself
@@ -7912,6 +7990,7 @@ window.fixProfileOwnership = fixProfileOwnership;
 window.openShareHealthModal = openShareHealthModal;
 window.switchShareType = switchShareType;
 window.copyMyUserId = copyMyUserId;
+window.howToShare = howToShare;
 window.shareHealthRecord = shareHealthRecord;
 window.revokeHealthAccess = revokeHealthAccess;
 window.showHealthProfiles = showHealthProfiles;
