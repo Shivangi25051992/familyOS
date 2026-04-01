@@ -1738,6 +1738,8 @@ function assignTag(val){
 }
 
 // ══ HELPERS ══
+// safeHtml — escapes user-supplied strings before innerHTML injection (XSS prevention)
+const safeHtml=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 const fmt=n=>!n?'₹0':n>=100000?'₹'+(n/100000).toFixed(1)+'L':n>=1000?'₹'+(n/1000).toFixed(0)+'K':'₹'+n;
 const fmtDate=d=>{try{return new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short'});}catch{return d||'';}};
 const spent=()=>data.expenses.reduce((s,e)=>s+(e.amount||0),0);
