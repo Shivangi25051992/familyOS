@@ -476,26 +476,41 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 .health-vital-chip-val { font-size: 20px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--gold); }
 .health-vital-chip-lbl { font-size: 9px; color: var(--text-faint); text-transform: uppercase; margin-top: 3px; letter-spacing: 0.5px; }
 .health-vital-history-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--gold-border); font-size: 12px; }
-.health-chat-wrap { display: flex; flex-direction: column; height: calc(100vh - 250px); min-height: 360px; }
-.health-chat-messages { flex: 1; overflow-y: auto; padding: 4px 0 18px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
-.chat-bubble-row { display: flex; flex-direction: column; }
+/* ── CHAT UI ── */
+.health-chat-container { display: flex; flex-direction: column; height: calc(100vh - 240px); min-height: 400px; }
+.health-chat-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--gold-border); background: var(--card); position: sticky; top: 0; z-index: 10; }
+.health-chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
+.chat-welcome { text-align: center; padding: 40px 20px; max-width: 500px; margin: 0 auto; }
+.chat-suggested-prompts { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.chat-prompt-chip { background: var(--surface); border: 1px solid var(--gold-border); border-radius: 12px; padding: 12px 16px; text-align: left; font-size: 13px; color: var(--text); cursor: pointer; transition: all 0.2s; }
+.chat-prompt-chip:hover { background: var(--card); border-color: var(--gold); transform: translateX(4px); }
+.chat-bubble-row { display: flex; flex-direction: column; animation: slideIn 0.2s ease-out; }
 .chat-bubble-row.user-row { align-items: flex-end; }
 .chat-bubble-row.ai-row { align-items: flex-start; }
-.chat-bubble { max-width: 86%; padding: 10px 14px; border-radius: 16px; font-size: 13px; line-height: 1.6; word-break: break-word; }
-.chat-bubble.user { background: var(--gold); color: #000; border-bottom-right-radius: 4px; }
+.chat-bubble { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.6; word-break: break-word; position: relative; }
+.chat-bubble.user { background: var(--gold); color: #000; border-bottom-right-radius: 4px; box-shadow: 0 2px 8px rgba(201,168,76,0.2); }
 .chat-bubble.ai { background: var(--card); border: 1px solid var(--gold-border); color: var(--text); border-bottom-left-radius: 4px; }
-.chat-bubble-time { font-size: 9px; color: var(--text-faint); margin-top: 3px; padding: 0 4px; }
-.chat-typing-dot { display: inline-flex; gap: 4px; align-items: center; }
-.chat-typing-dot span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); animation: pulse 1.2s infinite; }
+.chat-time { font-size: 10px; color: var(--text-faint); margin-top: 6px; opacity: 0.7; }
+.chat-typing-dot { display: inline-flex; gap: 4px; align-items: center; padding: 4px 0; }
+.chat-typing-dot span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); animation: pulse 1.2s infinite; }
 .chat-typing-dot span:nth-child(2) { animation-delay: 0.2s; }
 .chat-typing-dot span:nth-child(3) { animation-delay: 0.4s; }
-.chat-input-bar { display: flex; gap: 8px; padding: 10px 0 4px; border-top: 1px solid var(--gold-border); align-items: flex-end; position: sticky; bottom: 0; background: var(--bg); }
-.chat-input-bar textarea { flex: 1; resize: none; height: 42px; max-height: 100px; background: var(--surface); border: 1px solid var(--gold-border); border-radius: 12px; padding: 10px 12px; font-size: 13px; color: var(--text); font-family: inherit; outline: none; }
-.chat-bubble.ai .chat-h { font-weight: 700; color: var(--gold); margin: 4px 0 6px; font-size: 13px; }
-.chat-bubble.ai .chat-p { margin: 4px 0; color: var(--text-dim); }
-.chat-bubble.ai .chat-ul { margin: 6px 0 2px 18px; padding: 0; }
-.chat-bubble.ai .chat-ul li { margin: 4px 0; color: var(--text); }
+.health-chat-input-container { padding: 12px 16px; border-top: 1px solid var(--gold-border); background: var(--bg); position: sticky; bottom: 0; }
+.health-chat-input-wrapper { display: flex; gap: 8px; align-items: flex-end; background: var(--surface); border: 1px solid var(--gold-border); border-radius: 16px; padding: 8px 12px; transition: border-color 0.2s; }
+.health-chat-input-wrapper:focus-within { border-color: var(--gold); }
+.health-chat-input-wrapper textarea { flex: 1; resize: none; background: transparent; border: none; padding: 4px; font-size: 14px; color: var(--text); font-family: inherit; outline: none; line-height: 1.5; }
+.health-chat-input-actions { display: flex; gap: 6px; align-items: center; }
+.chat-action-btn { background: transparent; border: none; color: var(--text-faint); cursor: pointer; padding: 6px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.chat-action-btn:hover { background: var(--card); color: var(--gold); }
+.chat-send-btn { background: var(--gold); border: none; color: #000; cursor: pointer; padding: 8px 12px; border-radius: 10px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+.chat-send-btn:hover { transform: scale(1.05); box-shadow: 0 2px 8px rgba(201,168,76,0.3); }
+.chat-send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.chat-bubble.ai .chat-h { font-weight: 700; color: var(--gold); margin: 6px 0 8px; font-size: 14px; }
+.chat-bubble.ai .chat-p { margin: 6px 0; color: var(--text-dim); }
+.chat-bubble.ai .chat-ul { margin: 8px 0 4px 20px; padding: 0; }
+.chat-bubble.ai .chat-ul li { margin: 5px 0; color: var(--text); }
 .chat-bubble.ai strong { color: var(--text); font-weight: 700; }
+@keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -3852,7 +3867,7 @@ function scheduleRenderHealthTab() {
 function subscribeActivePatient() {
   if(!activeHealthProfileId || !FID) return;
   if(activePatientUnsubs.length) { activePatientUnsubs.forEach(u => u()); activePatientUnsubs = []; }
-  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [] };
+  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [], chatHistory: [] };
 
   const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
   const todayS = todayStr();
@@ -3886,6 +3901,7 @@ function subscribeActivePatient() {
 
   let u7 = null;
   let u8 = null;
+  let u9 = null;
   try {
     u7 = onSnapshot(query(collection(db, `${base}/doseLogs`), where('date', '==', todayS)), s => {
       activePatientData.doseLogs = s.docs.map(d => ({id: d.id, ...d.data()})); scheduleRenderHealthTab();
@@ -3900,8 +3916,16 @@ function subscribeActivePatient() {
   } catch(e) {
     console.warn('Notes query failed:', e);
   }
+  try {
+    u9 = onSnapshot(query(collection(db, `${base}/chatHistory`), orderBy('t', 'asc')), s => {
+      activePatientData.chatHistory = s.docs.map(d => ({id: d.id, ...d.data()})); 
+      if (activeHealthTab === 'chat') scheduleRenderHealthTab();
+    });
+  } catch(e) {
+    console.warn('Chat history query failed:', e);
+  }
 
-  activePatientUnsubs = [u1, u2, u3, u4, u5].concat([u6, u6Fallback, u7, u8].filter(Boolean));
+  activePatientUnsubs = [u1, u2, u3, u4, u5].concat([u6, u6Fallback, u7, u8, u9].filter(Boolean));
 }
 
 function switchHealthTab(tab, btn) {
@@ -4714,14 +4738,61 @@ function formatChatResponse(text){
   return html;
 }
 
+function getSuggestedPromptsForDiagnosis(diagnosis) {
+  const diag = String(diagnosis || '').toLowerCase();
+  
+  if (diag.includes('liver') || diag.includes('hepat')) {
+    return [
+      'What are the latest liver function test results?',
+      'Show medication schedule for today',
+      'Any dietary restrictions I should follow?',
+      'When is the next doctor visit?'
+    ];
+  } else if (diag.includes('diabet')) {
+    return [
+      'What was the last blood sugar reading?',
+      'Show today\'s medication schedule',
+      'What foods should I avoid?',
+      'Track my insulin doses this week'
+    ];
+  } else if (diag.includes('cardiac') || diag.includes('heart')) {
+    return [
+      'What was the latest BP reading?',
+      'Show heart medications for today',
+      'Any exercise restrictions?',
+      'Track my blood pressure trend'
+    ];
+  } else if (diag.includes('cancer') || diag.includes('oncology')) {
+    return [
+      'What are the latest tumor marker results?',
+      'Show chemo schedule',
+      'Side effects to watch for?',
+      'When is the next scan?'
+    ];
+  } else {
+    return [
+      'What medications are due today?',
+      'Show latest test results',
+      'Any upcoming doctor visits?',
+      'Summarize recent health changes'
+    ];
+  }
+}
+
 function buildChatHistory(history){
   let html = '';
   (history || []).forEach(function(msg){
     const isUser = msg.role === 'user';
     const body = isUser ? safeHtml(msg.text || '') : formatChatResponse(msg.text || '');
+    const time = msg.t ? new Date(msg.t).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '';
+    const date = msg.t ? new Date(msg.t).toLocaleDateString('en-IN',{day:'numeric', month:'short'}) : '';
+    const today = new Date().toLocaleDateString('en-IN',{day:'numeric', month:'short'});
+    const showDate = date && date !== today;
+    
     html += '<div class="chat-bubble-row ' + (isUser ? 'user-row' : 'ai-row') + '">' +
-      '<div class="chat-bubble ' + (isUser ? 'user' : 'ai') + '">' + body + '</div>' +
-      '<div class="chat-bubble-time">' + (msg.t ? new Date(msg.t).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'}) : '') + '</div>' +
+      '<div class="chat-bubble ' + (isUser ? 'user' : 'ai') + '">' + body +
+      '<div class="chat-time">' + (showDate ? date + ' · ' : '') + time + '</div>' +
+      '</div>' +
     '</div>';
   });
   return html;
@@ -4732,28 +4803,126 @@ function renderHealthChat() {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if(!p) return;
 
-  _healthChatHistory = p.chatHistory || [];
+  _healthChatHistory = activePatientData.chatHistory || [];
+  
+  // Get suggested prompts based on diagnosis
+  const suggestedPrompts = getSuggestedPromptsForDiagnosis(p.diagnosis);
 
   el.innerHTML = `
-    <div class="health-chat-wrap">
+    <div class="health-chat-container">
+      <div class="health-chat-header">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold-dim));display:flex;align-items:center;justify-content:center;font-size:18px">🤖</div>
+          <div>
+            <div style="font-weight:600;font-size:14px">Asha AI</div>
+            <div style="font-size:11px;color:var(--text-faint)">Care companion for ${safeHtml(p.name)}</div>
+          </div>
+        </div>
+        <button class="btn-sm" onclick="clearChatHistory()" style="font-size:11px">Clear chat</button>
+      </div>
+      
       <div class="health-chat-messages" id="health-chat-messages">
         ${_healthChatHistory.length === 0 ? `
-          <div class="chat-bubble ai">${formatChatResponse(`**Hi!** I\'m Asha, your care companion for ${p.name}.\n- Ask me about medications, vitals, reports, or visits\n- Log a care note by typing: **note: protein shake given**`)}</div>
+          <div class="chat-welcome">
+            <div style="font-size:24px;margin-bottom:8px">👋</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:8px">Hi! I'm Asha</div>
+            <div style="font-size:13px;color:var(--text-dim);margin-bottom:20px">Your AI care companion for ${safeHtml(p.name)}</div>
+            
+            <div style="font-size:12px;font-weight:600;margin-bottom:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px">Suggested questions</div>
+            <div class="chat-suggested-prompts">
+              ${suggestedPrompts.map(prompt => `
+                <button class="chat-prompt-chip" onclick="useSuggestedPrompt('${safeHtml(prompt).replace(/'/g, '&#39;')}')">${safeHtml(prompt)}</button>
+              `).join('')}
+            </div>
+            
+            <div style="font-size:11px;color:var(--text-faint);margin-top:20px;padding:12px;background:var(--surface);border-radius:8px">
+              <strong>💡 Tips:</strong><br>
+              • Ask about medications, vitals, or reports<br>
+              • Log care notes: "note: gave protein shake"<br>
+              • Get explanations of test results<br>
+              • Ask for medication reminders
+            </div>
+          </div>
         ` : buildChatHistory(_healthChatHistory)}
       </div>
-      <div class="chat-input-bar">
-        <textarea id="health-chat-input" placeholder="Ask about medications, vitals, report findings…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHealthChat()}"></textarea>
-        <button class="btn-sm fill" onclick="startVoiceInput('health-chat-input')" style="border-radius:50%;width:40px;height:40px;padding:0;flex-shrink:0">🎤</button>
-        <button class="btn-sm fill" onclick="sendHealthChat()" id="btn-chat-send" style="flex-shrink:0">Send</button>
+      
+      <div class="health-chat-input-container">
+        <div class="health-chat-input-wrapper">
+          <textarea 
+            id="health-chat-input" 
+            placeholder="Ask about ${safeHtml(p.name)}'s care…" 
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendHealthChat()}"
+            rows="1"
+            style="resize:none;overflow-y:auto;max-height:120px"
+          ></textarea>
+          <div class="health-chat-input-actions">
+            <button class="chat-action-btn" onclick="startVoiceInputForChat()" title="Voice input">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+            <button class="chat-send-btn" onclick="sendHealthChat()" id="btn-chat-send">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   `;
+
+  // Auto-resize textarea
+  const textarea = document.getElementById('health-chat-input');
+  if (textarea) {
+    textarea.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+  }
 
   // Scroll to bottom
   requestAnimationFrame(() => {
     const msgs = document.getElementById('health-chat-messages');
     if(msgs) msgs.scrollTop = msgs.scrollHeight;
   });
+}
+
+function startVoiceInputForChat() {
+  startVoiceInput('health-chat-input', null);
+}
+
+function useSuggestedPrompt(prompt) {
+  const input = document.getElementById('health-chat-input');
+  if (input) {
+    input.value = prompt;
+    input.focus();
+    // Auto-resize
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  }
+}
+
+async function clearChatHistory() {
+  if (!confirm('Clear all chat history? This cannot be undone.')) return;
+  try {
+    // Clear from Firestore subcollection
+    const base = `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`;
+    const snapshot = await getDocs(collection(db, base));
+    const deleteOps = snapshot.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deleteOps);
+    
+    _healthChatHistory = [];
+    showToast('Chat history cleared');
+    renderHealthChat();
+  } catch(e) {
+    console.error(e);
+    showToast('Error clearing chat');
+  }
 }
 
 async function sendHealthChat() {
@@ -4763,11 +4932,20 @@ async function sendHealthChat() {
   if(!q || !activeHealthProfileId) return;
 
   input.value = '';
-  btn.disabled = true; btn.textContent = '…';
+  input.style.height = 'auto';
+  btn.disabled = true;
 
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-  _healthChatHistory.push({ role: 'user', text: q, t: Date.now() });
+  const userMsg = { role: 'user', text: q, t: Date.now() };
+  _healthChatHistory.push(userMsg);
   renderHealthChat();
+
+  // Save user message to Firestore
+  try {
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`), userMsg);
+  } catch(e) {
+    console.error('Error saving user message:', e);
+  }
 
   if(isCareNoteCommand(q)){
     const noteText = stripCareNotePrefix(q);
@@ -4775,18 +4953,20 @@ async function sendHealthChat() {
       try{
         const saved = await saveCareNote(noteText);
         const catLabel = saved?.category ? saved.category : 'note';
-        _healthChatHistory.push({
+        const aiMsg = {
           role: 'ai',
           text: `**Saved.**\n- Category: ${catLabel}\n- Note: ${noteText}\n- I will use this in future responses.`,
           t: Date.now()
-        });
-        const toSave = _healthChatHistory.slice(-30);
-        await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { chatHistory: toSave });
+        };
+        _healthChatHistory.push(aiMsg);
+        await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`), aiMsg);
       }catch(e){
         console.error(e);
-        _healthChatHistory.push({ role: 'ai', text: 'Sorry, I could not save that note. Please try again.', t: Date.now() });
+        const errMsg = { role: 'ai', text: 'Sorry, I could not save that note. Please try again.', t: Date.now() };
+        _healthChatHistory.push(errMsg);
+        await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`), errMsg);
       }
-      btn.disabled = false; btn.textContent = 'Send';
+      btn.disabled = false;
       renderHealthChat();
       return;
     }
@@ -4806,17 +4986,19 @@ async function sendHealthChat() {
   try {
     const context = buildHealthChatContext(p);
     const answer = await callClaudeHealth(q, context, true, LLM_MODELS.medicalQA, 700);
-    _healthChatHistory.push({ role: 'ai', text: answer, t: Date.now() });
-
-    // Persist last 30 messages
-    const toSave = _healthChatHistory.slice(-30);
-    await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { chatHistory: toSave });
+    const aiMsg = { role: 'ai', text: answer, t: Date.now() };
+    _healthChatHistory.push(aiMsg);
+    
+    // Save AI response to Firestore
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`), aiMsg);
   } catch(e) {
     console.error(e);
-    _healthChatHistory.push({ role: 'ai', text: 'Sorry, something went wrong. Please try again.', t: Date.now() });
+    const errMsg = { role: 'ai', text: 'Sorry, something went wrong. Please try again.', t: Date.now() };
+    _healthChatHistory.push(errMsg);
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`), errMsg);
   }
 
-  btn.disabled = false; btn.textContent = 'Send';
+  btn.disabled = false;
   renderHealthChat();
 }
 
@@ -7215,6 +7397,9 @@ window.saveVital = saveVital;
 window.openAddVitalModal = openAddVitalModal;
 window.openVitalPhotoOCR = openVitalPhotoOCR;
 window.sendHealthChat = sendHealthChat;
+window.startVoiceInputForChat = startVoiceInputForChat;
+window.useSuggestedPrompt = useSuggestedPrompt;
+window.clearChatHistory = clearChatHistory;
 window.toggleHealthSummary = toggleHealthSummary;
 window.safeHtml = safeHtml; // expose for any inline-onclick context
 window.canDeleteHealthData = canDeleteHealthData;
