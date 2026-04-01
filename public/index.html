@@ -1491,10 +1491,28 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     </div>
     
     <div class="form-group">
-      <label class="form-label">Share with Family Member</label>
-      <select class="form-select" id="share-member-select">
-        <option value="">Select member...</option>
-      </select>
+      <label class="form-label">Share With</label>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="chip" id="share-type-family" onclick="switchShareType('family')" style="flex:1">Family Member</button>
+        <button class="chip" id="share-type-email" onclick="switchShareType('email')" style="flex:1">Any User (Email)</button>
+      </div>
+    </div>
+    
+    <div id="share-family-section" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Select Family Member</label>
+        <select class="form-select" id="share-member-select">
+          <option value="">Select member...</option>
+        </select>
+      </div>
+    </div>
+    
+    <div id="share-email-section" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Recipient Email</label>
+        <input class="form-input" id="share-email-input" type="email" placeholder="doctor@example.com">
+        <div style="font-size:10px;color:var(--text-faint);margin-top:4px">They must have a FamilyOS account with this email</div>
+      </div>
     </div>
     
     <div class="form-group">
@@ -3861,6 +3879,21 @@ async function deleteHealthProfile() {
   }
 }
 
+// Track current share type
+window._shareType = 'family';
+
+function switchShareType(type) {
+  window._shareType = type;
+  
+  // Update button states
+  document.getElementById('share-type-family').classList.toggle('active', type === 'family');
+  document.getElementById('share-type-email').classList.toggle('active', type === 'email');
+  
+  // Show/hide sections
+  document.getElementById('share-family-section').style.display = type === 'family' ? 'block' : 'none';
+  document.getElementById('share-email-section').style.display = type === 'email' ? 'block' : 'none';
+}
+
 async function openShareHealthModal() {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if (!canDeleteHealthData(p)) {
@@ -3873,7 +3906,6 @@ async function openShareHealthModal() {
   
   // Check if family members are loaded
   if (!data.members || data.members.length === 0) {
-    showToast('Loading family members...');
     // Try to load family members
     try {
       const familyDoc = await getDoc(doc(db, 'families', FID));
@@ -3883,8 +3915,6 @@ async function openShareHealthModal() {
       }
     } catch(e) {
       console.error('Error loading family members:', e);
-      showToast('Error loading family members');
-      return;
     }
   }
   
@@ -3898,6 +3928,12 @@ async function openShareHealthModal() {
     select.innerHTML = '<option value="">Select member...</option>' + 
       members.map(m => `<option value="${m.uid}">${safeHtml(m.name || 'Unknown')}</option>`).join('');
   }
+  
+  // Reset to family type by default
+  switchShareType('family');
+  
+  // Clear email input
+  document.getElementById('share-email-input').value = '';
   
   // Load existing shares
   await loadExistingShares();
@@ -3923,16 +3959,23 @@ async function loadExistingShares() {
     <div style="border-top:1px solid var(--gold-border);padding-top:16px">
       <div style="font-size:11px;font-weight:600;margin-bottom:10px;color:var(--text-faint);text-transform:uppercase">Currently Shared With</div>
       ${sharedWith.map(uid => {
-        const member = members.find(m => m.uid === uid);
         const shareDoc = p.shareDetails?.find(s => s.uid === uid);
+        const member = members.find(m => m.uid === uid);
+        
+        // Get name from shareDetails first (for email shares), then from members
+        const displayName = shareDoc?.name || member?.name || shareDoc?.email || 'Unknown';
+        const shareType = shareDoc?.shareType || 'family';
+        const typeLabel = shareType === 'email' ? '📧 External User' : '👨‍👩‍👧 Family';
+        
         const expiresAt = shareDoc?.expiresAt;
         const expiresDate = expiresAt ? new Date(expiresAt).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}) : 'Never';
+        
         return `
           <div class="list-item" style="margin-bottom:8px">
             <div class="list-icon">👤</div>
             <div class="list-info">
-              <div class="list-name">${safeHtml(member?.name || 'Unknown')}</div>
-              <div class="list-sub">Expires: ${expiresDate}</div>
+              <div class="list-name">${safeHtml(displayName)}</div>
+              <div class="list-sub">${typeLabel} · Expires: ${expiresDate}</div>
             </div>
             <button class="edit-btn" onclick="revokeHealthAccess('${uid}')">Revoke</button>
           </div>
@@ -3943,20 +3986,71 @@ async function loadExistingShares() {
 }
 
 async function shareHealthRecord() {
-  const memberUid = document.getElementById('share-member-select').value;
+  const shareType = window._shareType || 'family';
   const durationDays = parseInt(document.getElementById('share-duration').value, 10);
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   
-  if (!memberUid) {
-    showToast('Please select a family member');
-    return;
+  let recipientUid = null;
+  let recipientName = null;
+  let recipientEmail = null;
+  
+  if (shareType === 'family') {
+    // Family member sharing
+    recipientUid = document.getElementById('share-member-select').value;
+    if (!recipientUid) {
+      showToast('Please select a family member');
+      return;
+    }
+    
+    const members = data.members || [];
+    const member = members.find(m => m.uid === recipientUid);
+    if (!member) {
+      showToast('Member not found');
+      return;
+    }
+    recipientName = member.name;
+    recipientEmail = member.email;
+    
+  } else {
+    // Email-based sharing (any FamilyOS user)
+    recipientEmail = document.getElementById('share-email-input').value.trim().toLowerCase();
+    if (!recipientEmail) {
+      showToast('Please enter an email address');
+      return;
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientEmail)) {
+      showToast('Please enter a valid email address');
+      return;
+    }
+    
+    // Look up user by email in Firestore
+    try {
+      showToast('Looking up user...');
+      const usersQuery = query(collection(db, 'users'), where('email', '==', recipientEmail));
+      const usersSnapshot = await getDocs(usersQuery);
+      
+      if (usersSnapshot.empty) {
+        showToast('No FamilyOS user found with this email');
+        return;
+      }
+      
+      const userDoc = usersSnapshot.docs[0];
+      recipientUid = userDoc.id;
+      recipientName = userDoc.data().name || userDoc.data().email;
+      
+    } catch(e) {
+      console.error('Error looking up user:', e);
+      showToast('Error finding user. They may need to sign up first.');
+      return;
+    }
   }
   
-  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-  const members = data.members || [];
-  const member = members.find(m => m.uid === memberUid);
-  
-  if (!member) {
-    showToast('Member not found');
+  // Prevent sharing with yourself
+  if (recipientUid === CU.uid) {
+    showToast('Cannot share with yourself');
     return;
   }
   
@@ -3966,17 +4060,20 @@ async function shareHealthRecord() {
     const shareDetails = p.shareDetails || [];
     
     // Add to sharedWith array if not already there
-    if (!sharedWith.includes(memberUid)) {
-      sharedWith.push(memberUid);
+    if (!sharedWith.includes(recipientUid)) {
+      sharedWith.push(recipientUid);
     }
     
     // Update or add share details
-    const existingIdx = shareDetails.findIndex(s => s.uid === memberUid);
+    const existingIdx = shareDetails.findIndex(s => s.uid === recipientUid);
     const shareInfo = {
-      uid: memberUid,
+      uid: recipientUid,
+      email: recipientEmail,
+      name: recipientName,
       grantedAt: Date.now(),
       grantedBy: CU.uid,
-      expiresAt
+      expiresAt,
+      shareType
     };
     
     if (existingIdx >= 0) {
@@ -3991,7 +4088,12 @@ async function shareHealthRecord() {
       updatedAt: serverTimestamp()
     });
     
-    showToast(`Shared with ${member.name} ✓`);
+    showToast(`✓ Shared with ${recipientName || recipientEmail}`);
+    
+    // Clear inputs
+    document.getElementById('share-email-input').value = '';
+    document.getElementById('share-member-select').value = '';
+    
     await loadExistingShares();
   } catch(e) {
     console.error(e);
@@ -7755,6 +7857,7 @@ window.saveHealthProfile = saveHealthProfile;
 window.deleteHealthProfile = deleteHealthProfile;
 window.fixProfileOwnership = fixProfileOwnership;
 window.openShareHealthModal = openShareHealthModal;
+window.switchShareType = switchShareType;
 window.shareHealthRecord = shareHealthRecord;
 window.revokeHealthAccess = revokeHealthAccess;
 window.showHealthProfiles = showHealthProfiles;
