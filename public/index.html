@@ -1066,10 +1066,11 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     <div id="health-patient-view" style="display:none">
       <div class="sec-hdr">
         <button class="btn-ghost" onclick="showHealthProfiles()" style="padding:0;margin-right:12px;font-size:20px">←</button>
-        <div>
+        <div style="flex:1">
           <div class="sec-title" id="health-patient-name">Patient Name</div>
           <div style="font-size:12px;color:var(--text-dim)" id="health-patient-diagnosis">Diagnosis</div>
         </div>
+        <button class="edit-btn" id="health-patient-delete-btn" onclick="deleteHealthProfile()" style="display:none;font-size:16px">✕</button>
       </div>
       <div class="chip-row" id="health-tabs" style="overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none">
         <button class="chip on" onclick="switchHealthTab('overview',this)" style="white-space:nowrap">Overview</button>
@@ -1525,6 +1526,13 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group"><label class="form-label">Duration (days)</label><input class="form-input" id="hm-duration" type="number" min="1" placeholder="e.g. 5"></div>
         <div class="form-group"><label class="form-label">Start Date</label><input class="form-input" id="hm-start" type="date"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="hm-required" checked style="width:16px;height:16px">
+          <span>Required medication (alert if missed)</span>
+        </label>
+        <div style="font-size:10px;color:var(--text-faint);margin-top:4px">Uncheck for optional supplements or as-needed medications</div>
       </div>
       <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="hm-notes" placeholder="Optional notes"></div>
       <button class="btn-primary" onclick="saveMedication()">Save Medication</button>
@@ -3746,6 +3754,7 @@ async function saveHealthProfile() {
     const payload = {
       name, relation, diagnosis, diagnosedOn, bloodGroup,
       treatingHospital: hospital, treatingDoctor: doctor,
+      createdBy: CU.uid,
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     };
     const docRef = await addDoc(collection(db, `families/${FID}/healthProfiles`), payload);
@@ -3753,6 +3762,38 @@ async function saveHealthProfile() {
     closeModal('modal-add-patient');
     openPatientDashboard(docRef.id);
   } catch(e) { console.error(e); showToast('Error saving profile'); }
+}
+
+async function deleteHealthProfile() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!canDeleteHealthData(p)) {
+    showToast('Only the profile owner can delete this profile');
+    return;
+  }
+  
+  const confirmMsg = `Delete ${p.name}'s health profile? This will permanently delete all associated data (reports, medications, vitals, bills, visits). This action cannot be undone.`;
+  if (!confirm(confirmMsg)) return;
+  
+  try {
+    // Delete all subcollections first
+    const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+    const collections = ['reports', 'medications', 'vitals', 'bills', 'visits', 'timeline', 'doseLogs', 'notes', 'reminders'];
+    
+    for (const collName of collections) {
+      const snapshot = await getDocs(collection(db, `${base}/${collName}`));
+      const deleteOps = snapshot.docs.map(doc => deleteDoc(doc.ref));
+      await Promise.all(deleteOps);
+    }
+    
+    // Delete the profile itself
+    await deleteDoc(doc(db, `families/${FID}/healthProfiles`, activeHealthProfileId));
+    
+    showToast('Profile deleted');
+    showHealthProfiles();
+  } catch(e) { 
+    console.error(e); 
+    showToast('Error deleting profile'); 
+  }
 }
 
 function renderHealthProfiles() {
@@ -3788,6 +3829,13 @@ async function openPatientDashboard(id) {
 
   document.getElementById('health-patient-name').textContent = p.name;
   document.getElementById('health-patient-diagnosis').textContent = p.diagnosis;
+  
+  // Show delete button for profile owner or family primary owner
+  const deleteBtn = document.getElementById('health-patient-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.style.display = canDeleteHealthData(p) ? 'block' : 'none';
+  }
+  
   document.getElementById('health-profiles-view').style.display = 'none';
   document.getElementById('health-patient-view').style.display = 'block';
   
@@ -3895,6 +3943,33 @@ function _renderHealthOverviewInner(el) {
     <div class="health-alert-banner">
       <div class="health-alert-icon">🚨</div>
       <div class="health-alert-text"><strong>Attention needed:</strong> ${safeHtml(urgentReport.title)} — ${safeHtml(urgentReport.aiSummary?.slice(0,120))}...</div>
+    </div>` : '';
+  
+  // Overdue required medications alert
+  const now = new Date();
+  const currentHour = now.getHours();
+  const currentSlot = currentHour < 12 ? 'morning' : currentHour < 16 ? 'afternoon' : currentHour < 20 ? 'evening' : 'night';
+  const slotOrder = { morning: 0, afternoon: 1, evening: 2, night: 3 };
+  const activeMedsForOverdue = activePatientData.medications.filter(m => m.active !== false && m.required !== false);
+  const schedule = buildMedSchedule(activeMedsForOverdue);
+  const todayDosesForOverdue = activePatientData.doseLogs;
+  const overdueMeds = [];
+  
+  Object.entries(schedule).forEach(([slot, meds]) => {
+    if (slotOrder[slot] < slotOrder[currentSlot]) {
+      meds.forEach(m => {
+        const doseLog = todayDosesForOverdue.find(d => d.medicationId === m.id && d.slot === slot);
+        if (!doseLog || !doseLog.taken) {
+          overdueMeds.push({ ...m, slot });
+        }
+      });
+    }
+  });
+  
+  const overdueHtml = overdueMeds.length ? `
+    <div class="health-alert-banner" style="background:rgba(244,132,95,0.1);border-color:var(--orange)">
+      <div class="health-alert-icon" style="color:var(--orange)">⏰</div>
+      <div class="health-alert-text"><strong>${overdueMeds.length} overdue medication(s):</strong> ${overdueMeds.slice(0,3).map(m => safeHtml(m.name)).join(', ')}${overdueMeds.length > 3 ? ' +' + (overdueMeds.length-3) + ' more' : ''}</div>
     </div>` : '';
 
   // Care Summary — collapsible
@@ -4032,6 +4107,7 @@ function _renderHealthOverviewInner(el) {
 
   el.innerHTML = `
     ${alertHtml}
+    ${overdueHtml}
     ${summaryHtml}
 
     <div class="health-stats-row" style="margin-bottom:12px">
@@ -5734,6 +5810,7 @@ async function saveMedication() {
   const rawStartDate = document.getElementById('hm-start')?.value || null;
   const startDate = durationDays ? (rawStartDate || todayStr()) : (rawStartDate || null);
   const notes = document.getElementById('hm-notes').value.trim();
+  const required = document.getElementById('hm-required')?.checked !== false;
   
   if(!name) return;
   
@@ -5747,7 +5824,7 @@ async function saveMedication() {
   
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
-    const medPayload = { name, dose, frequency: freq, timing, notes, durationDays, startDate, active: true, addedAt: serverTimestamp() };
+    const medPayload = { name, dose, frequency: freq, timing, notes, durationDays, startDate, required, active: true, addedAt: serverTimestamp() };
     const medRef = await addDoc(collection(db, `${base}/medications`), medPayload);
     await addDoc(collection(db, `${base}/timeline`), { date: todayStr(), type: 'medication', title: `New Med: ${name}`, detail: `${dose} ${freq}`, addedAt: serverTimestamp() });
     await createMedicationReminders({ id: medRef.id, ...medPayload });
@@ -7107,6 +7184,7 @@ if(typeof todayStr==='undefined') window.todayStr=()=>new Date().toISOString().s
 
 // Health Exposures
 window.saveHealthProfile = saveHealthProfile;
+window.deleteHealthProfile = deleteHealthProfile;
 window.showHealthProfiles = showHealthProfiles;
 window.openPatientDashboard = openPatientDashboard;
 window.switchHealthTab = switchHealthTab;
