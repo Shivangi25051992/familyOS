@@ -4097,6 +4097,68 @@ function howToShare() {
   console.log('═══════════════════════════════════════════════════\n');
 }
 
+// Debug helper to check what profiles are shared with current user
+async function checkMySharedProfiles() {
+  if (!CU) {
+    console.error('❌ Not logged in');
+    return;
+  }
+  
+  console.log('\n═══════════════════════════════════════════════════');
+  console.log('🔍 CHECKING SHARED HEALTH PROFILES');
+  console.log('═══════════════════════════════════════════════════');
+  console.log('Current User:', CU.email);
+  console.log('Current User ID:', CU.uid);
+  console.log('');
+  
+  try {
+    // Query all health profiles where sharedWith contains current user
+    const q = query(collectionGroup(db, 'healthProfiles'), where('sharedWith', 'array-contains', CU.uid));
+    const snapshot = await getDocs(q);
+    
+    console.log('📊 Query result:', snapshot.size, 'profiles shared with you');
+    console.log('');
+    
+    if (snapshot.empty) {
+      console.log('❌ No profiles are shared with you');
+      console.log('');
+      console.log('💡 Possible reasons:');
+      console.log('  1. No one has shared a profile with your email yet');
+      console.log('  2. The share operation failed');
+      console.log('  3. Your User ID doesn\'t match what was shared');
+      console.log('');
+      console.log('Ask the profile owner to:');
+      console.log('  1. Open the profile');
+      console.log('  2. Click 🔗 Share button');
+      console.log('  3. Check "Currently Shared With" section');
+      console.log('  4. Verify your email/ID is listed');
+    } else {
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const pathParts = doc.ref.path.split('/');
+        const familyId = pathParts[1];
+        
+        console.log('✅ Shared Profile Found:');
+        console.log('  Name:', data.name);
+        console.log('  Diagnosis:', data.diagnosis);
+        console.log('  Family ID:', familyId);
+        console.log('  Profile ID:', doc.id);
+        console.log('  Shared with:', data.sharedWith);
+        console.log('  Created by:', data.createdBy);
+        console.log('');
+      });
+    }
+    
+    console.log('═══════════════════════════════════════════════════\n');
+    
+  } catch(e) {
+    console.error('❌ Error checking shared profiles:', e);
+    console.error('Error code:', e?.code);
+    console.error('Error message:', e?.message);
+    console.log('═══════════════════════════════════════════════════\n');
+  }
+}
+
 async function openShareHealthModal() {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if (!canDeleteHealthData(p)) {
@@ -8125,6 +8187,7 @@ window.openShareHealthModal = openShareHealthModal;
 window.switchShareType = switchShareType;
 window.copyMyUserId = copyMyUserId;
 window.howToShare = howToShare;
+window.checkMySharedProfiles = checkMySharedProfiles;
 window.shareHealthRecord = shareHealthRecord;
 window.revokeHealthAccess = revokeHealthAccess;
 window.showHealthProfiles = showHealthProfiles;
