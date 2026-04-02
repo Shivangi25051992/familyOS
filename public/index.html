@@ -572,7 +572,10 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
         3. <strong>Clear cache</strong> and try again<br>
         4. <strong>Use Chrome</strong> (recommended browser)<br>
         5. If on mobile app, tap <strong>⋮ → Open in browser</strong><br><br>
-        <span style="color:var(--gold)">💡 Still stuck?</span> Contact the person who invited you.
+        <span style="color:var(--gold)">💡 Still stuck?</span> Contact the person who invited you.<br><br>
+        <button class="btn-ghost" onclick="getAuthDiagnostics()" style="width:100%;margin-top:8px;font-size:11px;padding:8px">
+          📋 Copy Diagnostics for Support
+        </button>
       </div>
     </details>
   </div>
@@ -2257,34 +2260,72 @@ onAuthStateChanged(auth,async user=>{
     console.log('═══════════════════════════════════════════════════');
     
     // Handle redirect result and give time for auth to propagate
+    console.log('🔄 Step 1: Checking for redirect result...');
     try {
       const redirectResult = await getRedirectResult(auth);
+      console.log('🔄 Step 2: getRedirectResult returned:', redirectResult ? 'User object' : 'null');
+      
       if (redirectResult) {
         console.log('✅ Redirect sign-in completed:', redirectResult.user.email);
+        console.log('📊 User details:', {
+          uid: redirectResult.user.uid,
+          email: redirectResult.user.email,
+          displayName: redirectResult.user.displayName,
+          emailVerified: redirectResult.user.emailVerified
+        });
+        
+        // Log to AppMonitor
+        AppMonitor.capture('auth_redirect_success', 'User signed in via redirect', {
+          email: redirectResult.user.email,
+          uid: redirectResult.user.uid
+        });
         
         // CRITICAL FIX: Clear OAuth params from URL to prevent redirect loop
         // Without this, Firebase Auth will keep triggering redirects on mobile
+        console.log('🔄 Step 3: Checking URL for OAuth params...');
         const url = new URL(window.location.href);
         const hasOAuthParams = url.searchParams.has('code') || url.searchParams.has('state');
+        console.log('📊 OAuth params present:', hasOAuthParams);
+        
         if (hasOAuthParams) {
           console.log('🧹 Cleaning OAuth params from URL to prevent redirect loop');
+          const beforeUrl = window.location.href;
           url.searchParams.delete('code');
           url.searchParams.delete('state');
           url.searchParams.delete('scope');
           url.searchParams.delete('authuser');
           url.searchParams.delete('prompt');
           window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
-          console.log('✅ URL cleaned:', window.location.href);
+          console.log('✅ URL cleaned');
+          console.log('   Before:', beforeUrl);
+          console.log('   After:', window.location.href);
+          
+          // Log to AppMonitor
+          AppMonitor.capture('auth_url_cleaned', 'OAuth params removed from URL', {
+            before: beforeUrl,
+            after: window.location.href
+          });
         }
         
         // Give extra time for new user document creation
+        console.log('🔄 Step 4: Refreshing auth token and waiting 2s...');
         await user.getIdToken(true).catch(()=>{});
         await new Promise(r=>setTimeout(r,2000)); // Increased from 1500ms
+        console.log('✅ Step 4: Token refreshed, proceeding to user doc check');
+      } else {
+        console.log('ℹ️ No redirect result (normal for popup flow or already handled)');
       }
     } catch(e) {
       console.error('❌ Redirect sign-in error:', e);
       console.error('Error code:', e?.code);
       console.error('Error message:', e?.message);
+      console.error('Full error:', e);
+      
+      // Log to AppMonitor
+      AppMonitor.logFailure('auth_redirect', e.message, e);
+      
+      // Show user-friendly error
+      showToast('Sign-in redirect failed - please try again');
     }
     
     // After OAuth redirect (e.g. gmailConnected), give auth time to propagate to Firestore client
@@ -2323,33 +2364,92 @@ onAuthStateChanged(auth,async user=>{
         return;
       }
       
-      console.log('🔍 Checking user document...');
+      console.log('🔄 Step 5: Checking user document...');
+      console.log('📊 User ID:', user.uid);
+      console.log('📊 Firestore path:', `users/${user.uid}`);
+      
       let uDoc;
       try{
-        uDoc=await getDoc(doc(db,'users',user.uid));
+        const docRef = doc(db,'users',user.uid);
+        console.log('🔄 Fetching user document from Firestore...');
+        uDoc=await getDoc(docRef);
+        console.log('✅ Step 5: User doc fetch complete');
         console.log('📄 User doc exists:', uDoc.exists());
+        
         if(uDoc.exists()) {
-          console.log('📄 User doc data:', uDoc.data());
+          const userData = uDoc.data();
+          console.log('📄 User doc data:', userData);
+          console.log('📊 Has familyId:', !!userData.familyId);
+          console.log('📊 Role:', userData.role);
+          
+          // Log to AppMonitor
+          AppMonitor.capture('auth_user_doc_found', 'User document exists', {
+            uid: user.uid,
+            hasFamilyId: !!userData.familyId,
+            role: userData.role
+          });
+        } else {
+          console.log('⚠️ User document does NOT exist (new user)');
+          
+          // Log to AppMonitor
+          AppMonitor.capture('auth_user_doc_missing', 'User document not found (new user)', {
+            uid: user.uid,
+            email: user.email
+          });
         }
       }catch(e){
+        console.error('❌ Error fetching user document:', e);
+        console.error('Error code:', e?.code);
+        console.error('Error message:', e?.message);
+        
         if(e?.code==='permission-denied'||e?.message?.includes('permission')){
           console.warn('⚠️ Initial user read failed (permission), retrying with delay...');
+          
+          // Log to AppMonitor
+          AppMonitor.capture('auth_permission_denied_retry', 'Permission denied, retrying', {
+            uid: user.uid,
+            errorCode: e?.code
+          });
+          
           await new Promise(r=>setTimeout(r,2000));
           uDoc=await getDoc(doc(db,'users',user.uid));
           console.log('📄 User doc exists (retry):', uDoc.exists());
-        }else throw e;
+          
+          if(uDoc.exists()) {
+            console.log('✅ Retry successful, user doc found');
+            console.log('📄 User doc data (retry):', uDoc.data());
+          }
+        }else {
+          // Log to AppMonitor
+          AppMonitor.logFailure('auth_user_doc_fetch', e.message, e);
+          throw e;
+        }
       }
+      
+      console.log('🔄 Step 6: Determining which screen to show...');
       
       if(uDoc.exists()&&uDoc.data().familyId){
         FID=uDoc.data().familyId; 
         myRole=uDoc.data().role||'primary';
-        console.log('✅ User has family:', FID);
+        console.log('✅ Step 6: User has family - loading app');
+        console.log('✅ Family ID:', FID);
         console.log('✅ User role:', myRole);
         console.log('🚀 Loading family data...');
+        
+        // Log to AppMonitor
+        AppMonitor.capture('auth_loading_app', 'User has family, loading app', {
+          familyId: FID,
+          role: myRole
+        });
+        
         AppMonitor.onAuthReady();
+        
         // Check if we need PIN/biometric lock
         securityMode=LS.get('familyos_security')||'none';
         const sessionValid=LS.get('familyos_session');
+        console.log('📊 Security mode:', securityMode);
+        console.log('📊 Session valid:', !!sessionValid);
+        
         if(securityMode!=='none'&&!sessionValid){
           console.log('🔒 Security enabled, showing PIN screen');
           showPinScreen();
@@ -2358,33 +2458,76 @@ onAuthStateChanged(auth,async user=>{
           await loadAndSubscribe();
         }
       } else { 
+        console.log('🔄 Step 6: User needs setup (no family)');
         console.log('❌ User doc missing or no familyId');
         console.log('💡 User needs to either:');
         console.log('   1. Create a new family (setup screen)');
         console.log('   2. Join with invite code (join screen)');
         
+        // Log to AppMonitor
+        AppMonitor.capture('auth_needs_setup', 'User needs setup or invite', {
+          uid: user.uid,
+          email: user.email,
+          hasDoc: uDoc.exists(),
+          hasFamilyId: uDoc.exists() && !!uDoc.data().familyId
+        });
+        
         // Check URL params one more time for invite
         const params = new URLSearchParams(window.location.search);
         const urlInvite = params.get('invite');
+        console.log('📊 Checking URL for invite code...');
+        console.log('📊 Current URL:', window.location.href);
+        console.log('📊 Invite param:', urlInvite || 'none');
+        
         if (urlInvite) {
           console.log('🎉 Invite code found in URL, showing join screen');
+          console.log('📊 Invite code:', urlInvite.toUpperCase());
+          
+          // Log to AppMonitor
+          AppMonitor.capture('auth_showing_join', 'Showing join screen with invite', {
+            inviteCode: urlInvite.toUpperCase()
+          });
+          
           showScreen('scr-join');
           await prefillJoinScreen(urlInvite.toUpperCase());
+          console.log('✅ Join screen displayed with pre-filled invite code');
         } else {
           console.log('📝 No invite found, showing setup screen');
+          
+          // Log to AppMonitor
+          AppMonitor.capture('auth_showing_setup', 'Showing setup screen (no invite)', {
+            uid: user.uid
+          });
+          
           showScreen('scr-setup');
+          console.log('✅ Setup screen displayed');
         }
       }
       console.log('═══════════════════════════════════════════════════\n');
       console.log('💡 Helpful Commands:');
-      console.log('  copyMyUserId()  - Copy your User ID to share with others');
-      console.log('  howToShare()    - Show instructions for sharing health records');
+      console.log('  copyMyUserId()     - Copy your User ID to share with others');
+      console.log('  howToShare()       - Show instructions for sharing health records');
+      console.log('  getAuthDiagnostics() - Get diagnostic info to share with support');
       console.log('═══════════════════════════════════════════════════\n');
     }catch(e){ 
       console.error('❌ AUTH FLOW ERROR:', e);
       console.error('Error code:', e?.code);
       console.error('Error message:', e?.message);
-      AppMonitor.logFailure('auth_flow', e.message, e); 
+      console.error('Full error:', e);
+      
+      // Log to AppMonitor for tracking
+      AppMonitor.logFailure('auth_flow', e.message, e);
+      
+      // Show user-friendly error message
+      const errorMsg = e?.code === 'permission-denied' 
+        ? 'Permission error - please try signing in again'
+        : e?.message?.includes('network')
+        ? 'Network error - check your internet connection'
+        : 'Sign-in error - please try again or contact support';
+      
+      showToast(errorMsg);
+      
+      // Still show setup screen as fallback
       showScreen('scr-setup'); 
     }
   } else {
@@ -4271,6 +4414,130 @@ function howToShare() {
   console.log('  4. Click "Share Record"');
   console.log('');
   console.log('STEP 3: Recipient Access');
+}
+
+// Helper to get authentication diagnostics for support
+window.getAuthDiagnostics = async function() {
+  console.log('\n═══════════════════════════════════════════════════');
+  console.log('🔍 AUTHENTICATION DIAGNOSTICS');
+  console.log('═══════════════════════════════════════════════════');
+  
+  const diagnostics = {
+    timestamp: new Date().toISOString(),
+    url: window.location.href,
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+    language: navigator.language,
+    online: navigator.onLine,
+    cookiesEnabled: navigator.cookieEnabled,
+    
+    // Device info
+    device: {
+      isMobile: isMobile(),
+      isInAppBrowser: isInAppBrowser(),
+      isStandalonePWA: isStandalonePWA(),
+      screenWidth: window.screen.width,
+      screenHeight: window.screen.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    },
+    
+    // Auth state
+    auth: {
+      isSignedIn: !!CU,
+      uid: CU?.uid || 'not signed in',
+      email: CU?.email || 'not signed in',
+      displayName: CU?.displayName || 'not signed in',
+      emailVerified: CU?.emailVerified || false
+    },
+    
+    // App state
+    app: {
+      hasFamilyId: !!FID,
+      familyId: FID || 'none',
+      role: myRole || 'none',
+      securityMode: LS.get('familyos_security') || 'none',
+      hasSession: !!LS.get('familyos_session')
+    },
+    
+    // URL params
+    urlParams: {
+      inviteCode: new URLSearchParams(window.location.search).get('invite'),
+      hasOAuthCode: new URLSearchParams(window.location.search).has('code'),
+      hasOAuthState: new URLSearchParams(window.location.search).has('state'),
+      allParams: Object.fromEntries(new URLSearchParams(window.location.search))
+    },
+    
+    // LocalStorage
+    localStorage: {
+      pendingInvite: LS.get('pending_invite'),
+      theme: LS.get('familyos_theme'),
+      crashLogs: LS.get('_fos_crash') ? 'present' : 'none'
+    },
+    
+    // Current screen
+    ui: {
+      activeScreen: document.querySelector('.screen.active')?.id || 'unknown',
+      loadingVisible: document.getElementById('scr-loading')?.classList.contains('active') || false,
+      loginVisible: document.getElementById('scr-login')?.classList.contains('active') || false,
+      setupVisible: document.getElementById('scr-setup')?.classList.contains('active') || false,
+      joinVisible: document.getElementById('scr-join')?.classList.contains('active') || false
+    }
+  };
+  
+  console.log('📊 Device:', diagnostics.device);
+  console.log('📊 Auth:', diagnostics.auth);
+  console.log('📊 App:', diagnostics.app);
+  console.log('📊 URL Params:', diagnostics.urlParams);
+  console.log('📊 UI:', diagnostics.ui);
+  console.log('');
+  console.log('═══════════════════════════════════════════════════');
+  console.log('📋 COPY THIS INFO TO SHARE WITH SUPPORT:');
+  console.log('═══════════════════════════════════════════════════');
+  
+  const summary = `
+FamilyOS Auth Diagnostics
+========================
+Timestamp: ${diagnostics.timestamp}
+URL: ${diagnostics.url}
+
+Device:
+- Mobile: ${diagnostics.device.isMobile}
+- In-App Browser: ${diagnostics.device.isInAppBrowser}
+- PWA: ${diagnostics.device.isStandalonePWA}
+- User Agent: ${diagnostics.userAgent}
+
+Auth State:
+- Signed In: ${diagnostics.auth.isSignedIn}
+- Email: ${diagnostics.auth.email}
+- UID: ${diagnostics.auth.uid}
+
+App State:
+- Has Family: ${diagnostics.app.hasFamilyId}
+- Family ID: ${diagnostics.app.familyId}
+- Role: ${diagnostics.app.role}
+
+URL Params:
+- Invite Code: ${diagnostics.urlParams.inviteCode || 'none'}
+- Has OAuth Params: ${diagnostics.urlParams.hasOAuthCode || diagnostics.urlParams.hasOAuthState}
+
+Current Screen: ${diagnostics.ui.activeScreen}
+
+Issue Description:
+[User should describe what's happening]
+`;
+  
+  console.log(summary);
+  console.log('═══════════════════════════════════════════════════\n');
+  
+  try {
+    await navigator.clipboard.writeText(summary);
+    showToast('✓ Diagnostics copied to clipboard - send to support');
+  } catch(e) {
+    alert(summary);
+  }
+  
+  return diagnostics;
   console.log('  The profile will appear in their "Shared With You" section');
   console.log('  They will have read-only access');
   console.log('');
