@@ -1247,3 +1247,63 @@ exports.lookupUserByEmail = onCall(
     }
   }
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION 9: lookupUserByPhone — Find user UID by phone number for health record sharing
+// Server-side function with admin access to query users collection
+// ─────────────────────────────────────────────────────────────────────────────
+exports.lookupUserByPhone = onCall(
+  { cors: CORS_ORIGINS },
+  async (request) => {
+    const { phoneNumber } = request.data || {};
+    
+    // Validate input
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+      throw new Error('Phone number is required');
+    }
+    
+    // Validate requester is authenticated
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new Error('Unauthenticated');
+    }
+    
+    // Normalize phone number (remove spaces, dashes)
+    const normalizedPhone = phoneNumber.trim().replace(/[\s\-\(\)]/g, '');
+    
+    // Validate phone format (should start with +)
+    if (!normalizedPhone.startsWith('+')) {
+      throw new Error('Phone number must include country code (e.g., +91 9876543210)');
+    }
+    
+    try {
+      // Query users collection by phoneNumber
+      const usersSnapshot = await db.collection('users')
+        .where('phoneNumber', '==', normalizedPhone)
+        .limit(1)
+        .get();
+      
+      if (usersSnapshot.empty) {
+        return {
+          found: false,
+          message: 'No user found with this phone number'
+        };
+      }
+      
+      const userDoc = usersSnapshot.docs[0];
+      const userData = userDoc.data();
+      
+      return {
+        found: true,
+        uid: userDoc.id,
+        name: userData.name || userData.displayName || userData.phoneNumber,
+        phoneNumber: userData.phoneNumber,
+        email: userData.email || null
+      };
+      
+    } catch (error) {
+      console.error('Error looking up user by phone:', error);
+      throw new Error('Failed to lookup user: ' + error.message);
+    }
+  }
+);

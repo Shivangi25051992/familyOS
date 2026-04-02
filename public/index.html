@@ -1657,7 +1657,7 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <label class="form-label">Share With</label>
       <div style="display:flex;gap:8px;margin-bottom:12px">
         <button class="chip" id="share-type-family" onclick="switchShareType('family')" style="flex:1">Family Member</button>
-        <button class="chip" id="share-type-email" onclick="switchShareType('email')" style="flex:1">Any User (Email)</button>
+        <button class="chip" id="share-type-email" onclick="switchShareType('email')" style="flex:1">Any User (Email/Phone)</button>
       </div>
     </div>
     
@@ -1672,19 +1672,18 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     
     <div id="share-email-section" style="display:none">
       <div class="form-group">
-        <label class="form-label">Recipient Email or User ID</label>
-        <input class="form-input" id="share-email-input" type="text" placeholder="email@example.com or user ID">
+        <label class="form-label">Recipient Email, Phone, or User ID</label>
+        <input class="form-input" id="share-email-input" type="text" placeholder="email@example.com, +91 9876543210, or user ID">
         <div style="font-size:10px;color:var(--text-faint);margin-top:4px">
-          Enter their email or User ID. To get User ID: Ask them to go to Settings → Copy their User ID
+          Enter their email, phone number (with country code), or User ID
         </div>
       </div>
       <div style="background:var(--blue-soft);border:1px solid var(--blue);border-radius:8px;padding:10px;margin-top:10px">
-        <div style="font-size:10px;font-weight:600;color:var(--blue);margin-bottom:4px">💡 How to find User ID:</div>
-        <div style="font-size:10px;color:var(--text-dim)">
-          1. Ask recipient to open FamilyOS<br>
-          2. Go to Settings (⚙️ icon)<br>
-          3. Copy their User ID<br>
-          4. Paste it here
+        <div style="font-size:10px;font-weight:600;color:var(--blue);margin-bottom:4px">💡 Three ways to share:</div>
+        <div style="font-size:10px;color:var(--text-dim);line-height:1.6">
+          <strong>1. Email:</strong> user@example.com<br>
+          <strong>2. Phone:</strong> +91 9876543210 (with country code)<br>
+          <strong>3. User ID:</strong> Ask them to run copyMyUserId() in console
         </div>
       </div>
     </div>
@@ -5203,7 +5202,7 @@ async function shareHealthRecord() {
     recipientEmail = member.email;
     
   } else {
-    // Email or UID-based sharing (any FamilyOS user)
+    // Email, Phone, or UID-based sharing (any FamilyOS user)
     const input = document.getElementById('share-email-input').value.trim();
     
     console.log('\n═══════════════════════════════════════════════════');
@@ -5213,19 +5212,22 @@ async function shareHealthRecord() {
     
     if (!input) {
       console.error('❌ No input provided');
-      showToast('Please enter an email or User ID');
+      showToast('Please enter email, phone, or User ID');
       return;
     }
     
-    // Check if input looks like a UID (alphanumeric, 20-30 chars) or email
+    // Detect input type: email, phone, or UID
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const isEmail = emailRegex.test(input);
+    const phoneRegex = /^\+?\d{10,15}$/; // Phone: 10-15 digits, optional +
     
-    console.log('Input type:', isEmail ? 'Email' : 'User ID');
+    const isEmail = emailRegex.test(input);
+    const isPhone = phoneRegex.test(input.replace(/[\s\-\(\)]/g, '')); // Remove formatting
+    
+    console.log('Input type:', isEmail ? 'Email' : isPhone ? 'Phone Number' : 'User ID');
     
     if (isEmail) {
       // Use Cloud Function for email lookup (has admin access)
-      console.log('🔍 Looking up user via Cloud Function...');
+      console.log('🔍 Looking up user by email via Cloud Function...');
       try {
         showToast('Looking up user by email...');
         
@@ -5250,15 +5252,44 @@ async function shareHealthRecord() {
       } catch(e) {
         console.error('❌ Email lookup failed:', e);
         console.error('Error details:', e.message);
-        console.log('═══════════════════════════════════════════════════');
-        console.log('💡 FALLBACK: Use User ID instead of email');
-        console.log('═══════════════════════════════════════════════════');
-        console.log('1. Ask recipient to open console (F12)');
-        console.log('2. Ask them to run: copyMyUserId()');
-        console.log('3. They will see their User ID');
-        console.log('4. Paste their User ID here instead of email');
-        console.log('═══════════════════════════════════════════════════\n');
-        showToast('Error looking up user. Try User ID instead.');
+        showToast('Error looking up user. Try phone number or User ID instead.');
+        return;
+      }
+    } else if (isPhone) {
+      // Use Cloud Function for phone lookup (has admin access)
+      console.log('🔍 Looking up user by phone via Cloud Function...');
+      try {
+        // Normalize phone number (add + if missing, remove formatting)
+        let normalizedPhone = input.replace(/[\s\-\(\)]/g, '');
+        if (!normalizedPhone.startsWith('+')) {
+          // Assume India if no country code
+          normalizedPhone = '+91' + normalizedPhone;
+        }
+        
+        showToast('Looking up user by phone...');
+        
+        const lookupUserByPhone = httpsCallable(functions, 'lookupUserByPhone');
+        const result = await lookupUserByPhone({ phoneNumber: normalizedPhone });
+        
+        console.log('Cloud Function response:', result.data);
+        
+        if (!result.data.found) {
+          console.error('❌ No user found with phone:', normalizedPhone);
+          console.log('💡 TIP: Make sure they have signed up for FamilyOS with this phone number');
+          showToast('User not found. Make sure they have a FamilyOS account with this phone.');
+          return;
+        }
+        
+        recipientUid = result.data.uid;
+        recipientName = result.data.name;
+        recipientEmail = result.data.email;
+        
+        console.log('✅ User found:', { uid: recipientUid, name: recipientName, phone: result.data.phoneNumber });
+        
+      } catch(e) {
+        console.error('❌ Phone lookup failed:', e);
+        console.error('Error details:', e.message);
+        showToast('Error looking up user. Try email or User ID instead.');
         return;
       }
     } else {
