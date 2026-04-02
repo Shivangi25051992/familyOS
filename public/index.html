@@ -2844,6 +2844,8 @@ onAuthStateChanged(auth,async user=>{
         console.log('✅ Step 6: User has family - loading app');
         console.log('✅ Family ID:', FID);
         console.log('✅ User role:', myRole);
+        console.log('⚠️ CRITICAL: User has familyId - they SHOULD have created their own family OR joined via invite');
+        console.log('⚠️ If this user can see OTHER users\' data, there is a CRITICAL BUG in family creation/join flow');
         console.log('🚀 Loading family data...');
         
         // Log to AppMonitor
@@ -3314,9 +3316,47 @@ window.finishSetup=async()=>{
 // ══ LOAD ══
 async function loadAndSubscribe(){
   try{
+    console.log('\n🔄 LOADING FAMILY DATA');
+    console.log('═══════════════════════════════════════════════════');
+    console.log('Current User ID:', CU.uid);
+    console.log('Current User Email:', CU.email);
+    console.log('Current User Phone:', CU.phoneNumber);
+    console.log('Family ID (FID):', FID);
+    console.log('User Role:', myRole);
+    console.log('═══════════════════════════════════════════════════');
+    
     const fDoc=await getDoc(doc(db,'families',FID));
-    if(!fDoc.exists()){ showToast('Family not found'); return; }
+    if(!fDoc.exists()){ 
+      console.error('❌ CRITICAL: Family document not found!');
+      console.error('This should NEVER happen if user has a familyId');
+      showToast('Family not found'); 
+      return; 
+    }
     FD=fDoc.data();
+    
+    console.log('✅ Family document loaded');
+    console.log('Family Name:', FD.name);
+    console.log('Family Members:', FD.members);
+    console.log('Primary Owner:', FD.primaryOwner);
+    console.log('Member Profiles:', Object.keys(FD.memberProfiles || {}));
+    console.log('');
+    console.log('⚠️ SECURITY CHECK:');
+    console.log('Is current user in members array?', FD.members?.includes(CU.uid));
+    console.log('Is current user in memberProfiles?', !!FD.memberProfiles?.[CU.uid]);
+    console.log('Is current user the primary owner?', FD.primaryOwner === CU.uid);
+    
+    if (!FD.members?.includes(CU.uid) && !FD.memberProfiles?.[CU.uid]) {
+      console.error('❌❌❌ CRITICAL SECURITY BUG ❌❌❌');
+      console.error('User is loading a family they are NOT a member of!');
+      console.error('This is a CATASTROPHIC security breach!');
+      console.error('User should NOT have access to this family data!');
+      console.error('═══════════════════════════════════════════════════\n');
+      showToast('Security error: You are not a member of this family');
+      showScreen('scr-setup');
+      return;
+    }
+    console.log('✅ Security check passed: User is a valid member');
+    console.log('═══════════════════════════════════════════════════\n');
     activeModules=new Set(FD.modules||['interior','loan','kids']);
     if(myRole!=='primary'&&FD.memberProfiles?.[CU.uid]){
       myPerms=FD.memberProfiles[CU.uid].permissions||{};
