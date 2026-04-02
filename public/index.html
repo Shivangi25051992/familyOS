@@ -2114,7 +2114,16 @@ window.showScreen=id=>{
 const isMobile=()=>/iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const isInAppBrowser=()=>/Instagram|FBAN|FBAV|Twitter|Snapchat|Line|WhatsApp|Telegram|KAKAOTALK/i.test(navigator.userAgent);
 const isStandalonePWA=()=>window.matchMedia('(display-mode: standalone)').matches||!!navigator.standalone;
+
+// Prevent multiple simultaneous sign-in attempts
+let isSigningIn = false;
+
 window.signInWithGoogle=async()=>{
+  if (isSigningIn) {
+    console.log('⚠️ Sign-in already in progress, ignoring duplicate request');
+    return;
+  }
+  isSigningIn = true;
   const btn=document.querySelector('.btn-google');
   if(!auth){ showToast('Connection issue — try refreshing the page'); return; }
   if(isInAppBrowser()){
@@ -2164,6 +2173,7 @@ window.signInWithGoogle=async()=>{
     console.log('4. Check if pop-ups are blocked');
     console.log('5. Try a different browser (Chrome recommended)');
     console.log('═══════════════════════════════════════════════════\n');
+    isSigningIn = false; // Reset flag on error
     
     // Show user-friendly error message
     let errorMsg = 'Sign-in failed. Please try again.';
@@ -2236,6 +2246,7 @@ onAuthStateChanged(auth,async user=>{
   clearTimeout(authTimeout);
   if(user){
     CU=user;
+    isSigningIn = false; // Reset sign-in flag once auth completes
     
     console.log('\n═══════════════════════════════════════════════════');
     console.log('🔐 AUTH STATE CHANGED - User signed in');
@@ -2250,6 +2261,22 @@ onAuthStateChanged(auth,async user=>{
       const redirectResult = await getRedirectResult(auth);
       if (redirectResult) {
         console.log('✅ Redirect sign-in completed:', redirectResult.user.email);
+        
+        // CRITICAL FIX: Clear OAuth params from URL to prevent redirect loop
+        // Without this, Firebase Auth will keep triggering redirects on mobile
+        const url = new URL(window.location.href);
+        const hasOAuthParams = url.searchParams.has('code') || url.searchParams.has('state');
+        if (hasOAuthParams) {
+          console.log('🧹 Cleaning OAuth params from URL to prevent redirect loop');
+          url.searchParams.delete('code');
+          url.searchParams.delete('state');
+          url.searchParams.delete('scope');
+          url.searchParams.delete('authuser');
+          url.searchParams.delete('prompt');
+          window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+          console.log('✅ URL cleaned:', window.location.href);
+        }
+        
         // Give extra time for new user document creation
         await user.getIdToken(true).catch(()=>{});
         await new Promise(r=>setTimeout(r,2000)); // Increased from 1500ms
