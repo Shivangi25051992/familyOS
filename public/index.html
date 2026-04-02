@@ -2232,7 +2232,21 @@ onAuthStateChanged(auth,async user=>{
     console.log('Email:', user.email);
     console.log('═══════════════════════════════════════════════════');
     
-    await getRedirectResult(auth).catch(e=>{ if(e?.code) console.error('Redirect sign-in error:',e); });
+    // Handle redirect result and give time for auth to propagate
+    try {
+      const redirectResult = await getRedirectResult(auth);
+      if (redirectResult) {
+        console.log('✅ Redirect sign-in completed:', redirectResult.user.email);
+        // Give extra time for new user document creation
+        await user.getIdToken(true).catch(()=>{});
+        await new Promise(r=>setTimeout(r,2000)); // Increased from 1500ms
+      }
+    } catch(e) {
+      console.error('❌ Redirect sign-in error:', e);
+      console.error('Error code:', e?.code);
+      console.error('Error message:', e?.message);
+    }
+    
     // After OAuth redirect (e.g. gmailConnected), give auth time to propagate to Firestore client
     if(new URLSearchParams(location.search).get('gmailConnected')||new URLSearchParams(location.search).get('gmailError')){
       await user.getIdToken(true).catch(()=>{});
@@ -2245,12 +2259,24 @@ onAuthStateChanged(auth,async user=>{
     document.getElementById('settings-user-email').textContent=user.email||'';
     document.getElementById('pin-user-name').textContent=user.displayName?.split(' ')[0]||'Welcome back';
     try{
-      // Check for deep link invite first
-      const pendingInvite=LS.get('pending_invite');
+      // Check for deep link invite first (from URL or localStorage)
+      let pendingInvite=LS.get('pending_invite');
+      
+      // Also check URL params again (in case localStorage was cleared)
+      if (!pendingInvite) {
+        const params = new URLSearchParams(window.location.search);
+        const urlInvite = params.get('invite');
+        if (urlInvite) {
+          pendingInvite = urlInvite.toUpperCase();
+          LS.set('pending_invite', pendingInvite);
+        }
+      }
+      
       console.log('📋 Checking for pending invite:', pendingInvite || 'None');
       
       if(pendingInvite){
         console.log('✅ Found pending invite, showing join screen');
+        console.log('💡 User should see join screen with pre-filled code:', pendingInvite);
         LS.del('pending_invite');
         showScreen('scr-join');
         await prefillJoinScreen(pendingInvite);
@@ -2292,11 +2318,22 @@ onAuthStateChanged(auth,async user=>{
           await loadAndSubscribe();
         }
       } else { 
-        console.log('❌ User doc missing or no familyId, showing setup screen');
-        console.log('💡 User should either:');
+        console.log('❌ User doc missing or no familyId');
+        console.log('💡 User needs to either:');
         console.log('   1. Create a new family (setup screen)');
         console.log('   2. Join with invite code (join screen)');
-        showScreen('scr-setup'); 
+        
+        // Check URL params one more time for invite
+        const params = new URLSearchParams(window.location.search);
+        const urlInvite = params.get('invite');
+        if (urlInvite) {
+          console.log('🎉 Invite code found in URL, showing join screen');
+          showScreen('scr-join');
+          await prefillJoinScreen(urlInvite.toUpperCase());
+        } else {
+          console.log('📝 No invite found, showing setup screen');
+          showScreen('scr-setup');
+        }
       }
       console.log('═══════════════════════════════════════════════════\n');
       console.log('💡 Helpful Commands:');
