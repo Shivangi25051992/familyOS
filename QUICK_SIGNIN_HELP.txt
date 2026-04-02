@@ -1,0 +1,48 @@
+🏡 FamilyOS - Quick Sign-In Help
+
+📱 HAVING TROUBLE SIGNING IN?
+
+✅ SOLUTION (iPhone/Android):
+
+1. DON'T open link in WhatsApp/Instagram
+   → Tap ⋮ menu → "Open in Safari" or "Open in Chrome"
+
+2. Click "Continue with Google"
+   → Choose your Google account
+
+3. WAIT 2-3 seconds after redirect
+   → You should see the join screen
+
+4. Enter your invite code (or it's pre-filled)
+   → Tap "Join Family Space"
+
+---
+
+🔧 STILL STUCK?
+
+Try these:
+• Clear browser cache
+• Use incognito/private mode
+• Try different browser (Chrome recommended)
+• Restart your phone
+• Ask the person who invited you for help
+
+---
+
+💡 WHY THIS HAPPENS:
+
+WhatsApp/Instagram browsers block Google sign-in for security.
+You MUST open in Safari (iPhone) or Chrome (Android).
+
+---
+
+📋 QUICK CHECKLIST:
+
+✓ Open in Safari/Chrome (not WhatsApp)
+✓ Wait 2-3 seconds after Google sign-in
+✓ Check internet connection
+✓ Clear cache if needed
+
+---
+
+🆘 Need more help? Share this with the person who invited you.
