@@ -511,6 +511,18 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 .chat-bubble.ai .chat-ul li { margin: 5px 0; color: var(--text); }
 .chat-bubble.ai strong { color: var(--text); font-weight: 700; }
 @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── OTP INPUT STYLES ── */
+.otp-digit:focus {
+  border-color: var(--gold) !important;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gold-soft);
+}
+.otp-digit.filled {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+.login-state { animation: fadeIn 0.2s ease; }
 </style>
 </head>
 <body>
@@ -548,38 +560,155 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 <div id="scr-login" class="screen">
   <div class="login-icon">🏡</div>
   <div class="login-title">Family<em>OS</em>.</div>
-  <div class="login-sub">Your household's private operating system. Secure, elegant, always in sync.</div>
-  <button class="btn-google" onclick="signInWithGoogle()">
-    <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-    Continue with Google
-  </button>
-  <div id="login-open-browser" style="display:none;margin-top:16px;padding:12px;background:rgba(201,168,76,0.15);border-radius:8px;font-size:12px;color:var(--gold);text-align:center">
-    Sign-in doesn't work in WhatsApp/Instagram browser.<br>
-    Tap ⋮ menu → <strong>Open in Chrome</strong> or <strong>Open in Safari</strong>, then try again.
-  </div>
-  <div id="login-invite-hint" style="display:none;margin-top:16px;padding:12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;font-size:12px;color:var(--blue);text-align:center">
-    🎉 <strong>You have an invite!</strong><br>
-    Sign in with Google to join your family space.
-  </div>
-  <button class="btn-ghost" onclick="showScreen('scr-join')">Have an invite code? →</button>
-  <div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--gold-border)">
-    <details style="font-size:11px;color:var(--text-faint);text-align:center;cursor:pointer">
-      <summary style="list-style:none;padding:8px;color:var(--gold)">Having trouble signing in?</summary>
-      <div style="margin-top:12px;text-align:left;padding:12px;background:var(--surface);border-radius:8px;line-height:1.6">
-        <strong style="color:var(--text)">Try these steps:</strong><br><br>
-        1. <strong>Open in browser</strong> (not WhatsApp/Instagram)<br>
-        2. <strong>Allow pop-ups</strong> if prompted<br>
-        3. <strong>Clear cache</strong> and try again<br>
-        4. <strong>Use Chrome</strong> (recommended browser)<br>
-        5. If on mobile app, tap <strong>⋮ → Open in browser</strong><br><br>
-        <span style="color:var(--gold)">💡 Still stuck?</span> Contact the person who invited you.<br><br>
-        <button class="btn-ghost" onclick="getAuthDiagnostics()" style="width:100%;margin-top:8px;font-size:11px;padding:8px">
-          📋 Copy Diagnostics for Support
+  <div class="login-sub">Your household's private operating system.<br>Secure, elegant, always in sync.</div>
+
+  <div id="login-content" style="width:100%;max-width:320px">
+    
+    <!-- STATE 1: CHOOSE METHOD -->
+    <div class="login-state" id="login-state-choose">
+      
+      <!-- PRIMARY: Phone/OTP -->
+      <div style="margin-bottom:12px">
+        <button class="btn-primary" id="btn-phone-signin" 
+                onclick="window.showPhoneInput()" 
+                style="width:100%;padding:16px;font-size:16px;display:flex;align-items:center;justify-content:center;gap:10px">
+          <span style="font-size:20px">📱</span>
+          Continue with Mobile Number
+        </button>
+        <div style="font-size:11px;color:var(--text-faint);text-align:center;margin-top:6px">
+          Works on all browsers and devices
+        </div>
+      </div>
+
+      <!-- DIVIDER -->
+      <div style="display:flex;align-items:center;gap:12px;margin:20px 0">
+        <div style="flex:1;height:1px;background:var(--gold-border)"></div>
+        <div style="font-size:11px;color:var(--text-faint)">or</div>
+        <div style="flex:1;height:1px;background:var(--gold-border)"></div>
+      </div>
+
+      <!-- SECONDARY: Google -->
+      <button class="btn-google" id="btn-google-signin" 
+              onclick="window.signInWithGoogle()">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Continue with Google
+      </button>
+      
+      <!-- In-app browser warning (hidden by default) -->
+      <div id="login-inapp-warning" style="display:none;margin-top:16px;padding:14px;background:rgba(201,168,76,0.12);border:1px solid var(--gold-border);border-radius:var(--r-md);font-size:13px;line-height:1.6;text-align:center">
+        ⚠️ <strong>Sign-in doesn't work here</strong><br>
+        You're in WhatsApp/Instagram browser.<br>
+        Tap <strong>⋮ menu → Open in Chrome</strong> or <strong>Open in Safari</strong>
+      </div>
+      
+      <div id="login-invite-hint" style="display:none;margin-top:16px;padding:12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;font-size:12px;color:var(--blue);text-align:center">
+        🎉 <strong>You have an invite!</strong><br>
+        Sign in to join your family space.
+      </div>
+
+      <div style="margin-top:20px">
+        <button class="btn-ghost" onclick="showScreen('scr-join')">
+          Have an invite code? →
         </button>
       </div>
-    </details>
+      <div class="login-note">🔒 &nbsp;Invitation-only · Private · Encrypted</div>
+    </div>
+
+    <!-- STATE 2: PHONE NUMBER ENTRY -->
+    <div class="login-state" id="login-state-otp-phone" style="display:none">
+      <div style="font-size:14px;color:var(--text-dim);margin-bottom:20px;text-align:center">
+        Enter your mobile number to receive a verification code
+      </div>
+      
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <select id="otp-country-code" 
+                style="background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:12px 8px;color:var(--text);font-size:14px;width:90px;flex-shrink:0">
+          <option value="+91">🇮🇳 +91</option>
+          <option value="+1">🇺🇸 +1</option>
+          <option value="+44">🇬🇧 +44</option>
+          <option value="+61">🇦🇺 +61</option>
+          <option value="+971">🇦🇪 +971</option>
+          <option value="+65">🇸🇬 +65</option>
+        </select>
+        <input type="tel" id="otp-phone-input" 
+               class="form-input" 
+               placeholder="10-digit mobile number"
+               maxlength="10"
+               inputmode="numeric"
+               pattern="[0-9]*"
+               style="flex:1;font-size:16px;letter-spacing:2px"
+               onkeydown="if(event.key==='Enter') window.sendOTP()">
+      </div>
+      
+      <!-- Invisible reCAPTCHA container -->
+      <div id="recaptcha-container"></div>
+      
+      <button class="btn-primary" onclick="window.sendOTP()" id="btn-send-otp"
+              style="width:100%;padding:14px;font-size:15px;margin-bottom:12px">
+        Send Verification Code
+      </button>
+      
+      <button class="btn-ghost" onclick="window.showLoginChoose()">
+        ← Back
+      </button>
+      
+      <div id="otp-phone-error" style="display:none;color:var(--red);font-size:13px;text-align:center;margin-top:10px;padding:10px;background:var(--red-soft);border-radius:var(--r-sm)"></div>
+    </div>
+
+    <!-- STATE 3: OTP VERIFICATION -->
+    <div class="login-state" id="login-state-otp-verify" style="display:none">
+      <div id="otp-verify-prompt" style="font-size:14px;color:var(--text-dim);margin-bottom:20px;text-align:center">
+        Enter the 6-digit code sent to your number
+      </div>
+      
+      <!-- 6-digit OTP input boxes -->
+      <div style="display:flex;gap:8px;justify-content:center;margin-bottom:20px" id="otp-boxes">
+        <input type="tel" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]"
+               style="width:44px;height:54px;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;background:var(--card);border:2px solid var(--gold-border);border-radius:var(--r-md);color:var(--text)"
+               oninput="window.otpDigitInput(this,0)" onkeydown="window.otpDigitKeydown(event,0)">
+        <input type="tel" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]"
+               style="width:44px;height:54px;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;background:var(--card);border:2px solid var(--gold-border);border-radius:var(--r-md);color:var(--text)"
+               oninput="window.otpDigitInput(this,1)" onkeydown="window.otpDigitKeydown(event,1)">
+        <input type="tel" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]"
+               style="width:44px;height:54px;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;background:var(--card);border:2px solid var(--gold-border);border-radius:var(--r-md);color:var(--text)"
+               oninput="window.otpDigitInput(this,2)" onkeydown="window.otpDigitKeydown(event,2)">
+        <input type="tel" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]"
+               style="width:44px;height:54px;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;background:var(--card);border:2px solid var(--gold-border);border-radius:var(--r-md);color:var(--text)"
+               oninput="window.otpDigitInput(this,3)" onkeydown="window.otpDigitKeydown(event,3)">
+        <input type="tel" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]"
+               style="width:44px;height:54px;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;background:var(--card);border:2px solid var(--gold-border);border-radius:var(--r-md);color:var(--text)"
+               oninput="window.otpDigitInput(this,4)" onkeydown="window.otpDigitKeydown(event,4)">
+        <input type="tel" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]"
+               style="width:44px;height:54px;text-align:center;font-size:22px;font-weight:700;font-family:'DM Mono',monospace;background:var(--card);border:2px solid var(--gold-border);border-radius:var(--r-md);color:var(--text)"
+               oninput="window.otpDigitInput(this,5)" onkeydown="window.otpDigitKeydown(event,5)">
+      </div>
+      
+      <button class="btn-primary" onclick="window.verifyOTP()" id="btn-verify-otp"
+              style="width:100%;padding:14px;font-size:15px;margin-bottom:12px">
+        Verify & Sign In
+      </button>
+      
+      <div style="text-align:center;margin-bottom:8px">
+        <span id="otp-resend-timer" style="font-size:12px;color:var(--text-faint)">Resend in 30s</span>
+        <button id="btn-resend-otp" onclick="window.resendOTP()" 
+                style="display:none;background:none;border:none;color:var(--gold);font-size:13px;cursor:pointer;text-decoration:underline">
+          Resend Code
+        </button>
+      </div>
+      
+      <button class="btn-ghost" onclick="window.showPhoneInput()">
+        ← Change Number
+      </button>
+      
+      <div id="otp-verify-error" style="display:none;color:var(--red);font-size:13px;text-align:center;margin-top:10px;padding:10px;background:var(--red-soft);border-radius:var(--r-sm)"></div>
+    </div>
+
   </div>
-  <div class="login-note">🔒 &nbsp;Invitation-only · Private · Encrypted</div>
 </div>
 
 <!-- ═══ JOIN ═══ -->
@@ -1857,7 +1986,7 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as fbSignOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as fbSignOut, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential, updateProfile }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   collection, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, deleteField,
@@ -2121,81 +2250,356 @@ const isStandalonePWA=()=>window.matchMedia('(display-mode: standalone)').matche
 // Prevent multiple simultaneous sign-in attempts
 let isSigningIn = false;
 
-window.signInWithGoogle=async()=>{
+// Phone auth variables
+let _recaptchaVerifier = null;
+let _otpConfirmationResult = null;
+let _otpResendTimer = null;
+let _otpPhoneNumber = null;
+
+/*
+  FIREBASE SETUP REQUIRED FOR PHONE AUTH:
+  1. Firebase Console → Authentication → Sign-in method → Phone → Enable
+  2. Firebase Console → Authentication → Settings → Authorized domains
+     → Add: familyos-e3d4b.web.app and localhost
+  3. For production: Add your domain to authorized domains
+  4. Phone auth uses invisible reCAPTCHA — no user action needed
+  5. Test phone numbers can be added in Firebase Console for development
+*/
+
+// ── LOGIN STATE NAVIGATION ──
+
+window.showLoginChoose = function() {
+  document.getElementById('login-state-choose').style.display = '';
+  document.getElementById('login-state-otp-phone').style.display = 'none';
+  document.getElementById('login-state-otp-verify').style.display = 'none';
+};
+
+window.showPhoneInput = function() {
+  document.getElementById('login-state-choose').style.display = 'none';
+  document.getElementById('login-state-otp-phone').style.display = '';
+  document.getElementById('login-state-otp-verify').style.display = 'none';
+  document.getElementById('otp-phone-error').style.display = 'none';
+  
+  // Initialize reCAPTCHA
+  if (!_recaptchaVerifier) {
+    try {
+      _recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: function() {},
+        'expired-callback': function() {
+          _recaptchaVerifier = null;
+        }
+      });
+    } catch(e) {
+      console.warn('reCAPTCHA init failed:', e);
+    }
+  }
+  
+  setTimeout(function() {
+    var inp = document.getElementById('otp-phone-input');
+    if (inp) inp.focus();
+  }, 100);
+};
+
+// ── SEND OTP ──
+
+window.sendOTP = async function() {
+  var phoneInput = document.getElementById('otp-phone-input');
+  var countryCode = document.getElementById('otp-country-code').value;
+  var rawNumber = (phoneInput ? phoneInput.value : '').replace(/\D/g, '');
+  var errorEl = document.getElementById('otp-phone-error');
+  var btn = document.getElementById('btn-send-otp');
+  
+  // Validate
+  if (!rawNumber || rawNumber.length < 10) {
+    errorEl.textContent = 'Please enter a valid 10-digit mobile number';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (rawNumber.length > 10) rawNumber = rawNumber.slice(-10);
+  
+  var fullNumber = countryCode + rawNumber;
+  _otpPhoneNumber = fullNumber;
+  
+  errorEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  
+  console.log('📱 Sending OTP to:', fullNumber);
+  
+  try {
+    // Re-initialize reCAPTCHA if needed
+    if (!_recaptchaVerifier) {
+      _recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: function() {}
+      });
+    }
+    
+    _otpConfirmationResult = await signInWithPhoneNumber(auth, fullNumber, _recaptchaVerifier);
+    console.log('✅ OTP sent successfully');
+    
+    // Log to AppMonitor
+    AppMonitor.capture('otp_sent', 'OTP sent to phone', { phone: fullNumber });
+    
+    // Show verify state
+    document.getElementById('login-state-otp-phone').style.display = 'none';
+    document.getElementById('login-state-otp-verify').style.display = '';
+    document.getElementById('otp-verify-prompt').textContent = 
+      'Enter the 6-digit code sent to ' + countryCode + ' ' + rawNumber;
+    
+    // Clear OTP boxes
+    document.querySelectorAll('.otp-digit').forEach(function(el) { el.value = ''; });
+    var first = document.querySelector('.otp-digit');
+    if (first) first.focus();
+    
+    // Start resend timer
+    window.startOTPTimer();
+    
+  } catch(e) {
+    console.error('OTP send failed:', e);
+    AppMonitor.logFailure('otp_send', e.message, e);
+    
+    var msg = 'Failed to send code. ';
+    if (e.code === 'auth/invalid-phone-number') msg += 'Invalid phone number format.';
+    else if (e.code === 'auth/too-many-requests') msg += 'Too many attempts. Try again in 1 hour.';
+    else if (e.code === 'auth/quota-exceeded') msg += 'SMS quota exceeded. Try Google sign-in.';
+    else if (e.code === 'auth/captcha-check-failed') {
+      msg += 'Security check failed. Reload the page and try again.';
+      _recaptchaVerifier = null;
+    } else msg += 'Try Google sign-in instead.';
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+    
+    // Reset reCAPTCHA for retry
+    _recaptchaVerifier = null;
+  }
+  
+  btn.disabled = false;
+  btn.textContent = 'Send Verification Code';
+};
+
+// ── OTP DIGIT INPUT HANDLERS ──
+
+window.otpDigitInput = function(el, idx) {
+  var val = el.value.replace(/\D/g, '');
+  el.value = val.slice(0, 1);
+  if (val && idx < 5) {
+    var boxes = document.querySelectorAll('.otp-digit');
+    if (boxes[idx + 1]) boxes[idx + 1].focus();
+  }
+  // Auto-verify when all 6 filled
+  var all = Array.from(document.querySelectorAll('.otp-digit')).map(function(b){ return b.value; }).join('');
+  if (all.length === 6) window.verifyOTP();
+};
+
+window.otpDigitKeydown = function(event, idx) {
+  if (event.key === 'Backspace') {
+    var boxes = document.querySelectorAll('.otp-digit');
+    if (!boxes[idx].value && idx > 0) {
+      boxes[idx - 1].focus();
+      boxes[idx - 1].value = '';
+    }
+  }
+};
+
+// ── VERIFY OTP ──
+
+window.verifyOTP = async function() {
+  var boxes = document.querySelectorAll('.otp-digit');
+  var code = Array.from(boxes).map(function(b){ return b.value; }).join('');
+  var errorEl = document.getElementById('otp-verify-error');
+  var btn = document.getElementById('btn-verify-otp');
+  
+  if (code.length !== 6) {
+    errorEl.textContent = 'Please enter the complete 6-digit code';
+    errorEl.style.display = 'block';
+    return;
+  }
+  
+  errorEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Verifying...';
+  
+  console.log('🔐 Verifying OTP code...');
+  
+  try {
+    if (!_otpConfirmationResult) throw new Error('Session expired. Please request a new code.');
+    
+    await _otpConfirmationResult.confirm(code);
+    console.log('✅ OTP verified successfully');
+    
+    // Log to AppMonitor
+    AppMonitor.capture('otp_verified', 'OTP verification successful', { phone: _otpPhoneNumber });
+    
+    // onAuthStateChanged will fire and handle the rest
+    // No need to do anything here
+    
+  } catch(e) {
+    console.error('OTP verify failed:', e);
+    AppMonitor.logFailure('otp_verify', e.message, e);
+    
+    var msg = 'Verification failed. ';
+    if (e.code === 'auth/invalid-verification-code') msg += 'Wrong code. Check SMS and try again.';
+    else if (e.code === 'auth/code-expired') msg += 'Code expired. Request a new one.';
+    else msg += e.message || 'Please try again.';
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Verify & Sign In';
+  }
+};
+
+// ── RESEND TIMER ──
+
+window.startOTPTimer = function() {
+  var seconds = 30;
+  var timerEl = document.getElementById('otp-resend-timer');
+  var resendBtn = document.getElementById('btn-resend-otp');
+  if (resendBtn) resendBtn.style.display = 'none';
+  if (timerEl) timerEl.style.display = '';
+  
+  clearInterval(_otpResendTimer);
+  _otpResendTimer = setInterval(function() {
+    seconds--;
+    if (timerEl) timerEl.textContent = 'Resend in ' + seconds + 's';
+    if (seconds <= 0) {
+      clearInterval(_otpResendTimer);
+      if (timerEl) timerEl.style.display = 'none';
+      if (resendBtn) resendBtn.style.display = '';
+    }
+  }, 1000);
+};
+
+window.resendOTP = function() {
+  _otpConfirmationResult = null;
+  _recaptchaVerifier = null;
+  window.showPhoneInput();
+  var inp = document.getElementById('otp-phone-input');
+  if (inp && _otpPhoneNumber) {
+    inp.value = _otpPhoneNumber.replace(/^\+\d{1,3}/, '');
+  }
+};
+
+// ── IN-APP BROWSER DETECTION ──
+
+window.detectInAppBrowser = function() {
+  var ua = navigator.userAgent || '';
+  return /FB_IAB|FBAN|FBAV|Instagram|Line\/|WhatsApp|Snapchat|Twitter|TikTok/i.test(ua)
+    || (typeof window.webkit !== 'undefined' && /Instagram|FB_IAB/i.test(ua));
+};
+
+// ── GOOGLE SIGN-IN (popup-first with redirect fallback) ──
+
+window.signInWithGoogle = async function() {
   if (isSigningIn) {
     console.log('⚠️ Sign-in already in progress, ignoring duplicate request');
     return;
   }
   isSigningIn = true;
-  const btn=document.querySelector('.btn-google');
-  if(!auth){ showToast('Connection issue — try refreshing the page'); return; }
-  if(isInAppBrowser()){
+  
+  var btn = document.getElementById('btn-google-signin');
+  if (!btn) btn = document.querySelector('.btn-google'); // Fallback
+  
+  if (!auth) { 
+    showToast('Connection issue — try refreshing the page'); 
+    isSigningIn = false;
+    return; 
+  }
+  
+  // Check for in-app browser
+  if (window.detectInAppBrowser && window.detectInAppBrowser()) {
     showToast('Open in Chrome or Safari for sign-in');
-    const openHint=document.getElementById('login-open-browser');
-    if(openHint) openHint.style.display='block';
+    var warning = document.getElementById('login-inapp-warning');
+    if (warning) warning.style.display = 'block';
+    isSigningIn = false;
     return;
   }
-  if(btn){ btn.disabled=true; btn.innerHTML='<span class="ring" style="width:20px;height:20px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:8px"></span> Signing in...'; }
   
-  console.log('\n═══════════════════════════════════════════════════');
-  console.log('🔐 GOOGLE SIGN-IN INITIATED');
-  console.log('═══════════════════════════════════════════════════');
+  if (btn) { btn.disabled = true; btn.textContent = 'Connecting...'; }
   
-  try{
-    // IMPROVED LOGIC: Always use redirect on mobile for better reliability
-    // Popup has issues on mobile PWA due to browser security restrictions
-    const usePopup = !isMobile(); // Desktop only
-    console.log('Sign-in method:', usePopup ? 'Popup' : 'Redirect');
-    console.log('Is PWA:', isStandalonePWA());
-    console.log('Is Mobile:', isMobile());
-    console.log('User Agent:', navigator.userAgent.substring(0, 100));
+  var provider = new GoogleAuthProvider();
+  provider.addScope('email');
+  provider.addScope('profile');
+  
+  var resetBtn = function() {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Continue with Google';
+    }
+  };
+  
+  console.log('🔐 Google Sign-In: Attempting popup first...');
+  
+  // Strategy: Always try popup first (works on desktop + modern mobile).
+  // If popup is blocked or fails, fall back to redirect.
+  // This avoids the Safari ITP issue that breaks redirect on iOS.
+  
+  try {
+    // ATTEMPT 1: Popup (fast, no page reload, works on most platforms)
+    var result = await signInWithPopup(auth, provider);
+    console.log('✅ Google sign-in successful (popup):', result.user.email);
     
-    if(usePopup){
-      console.log('🔄 Attempting popup sign-in (Desktop)...');
-      const result = await signInWithPopup(auth,new GoogleAuthProvider());
-      console.log('✅ Popup sign-in successful');
-      console.log('User:', result.user.email);
+    // Log to AppMonitor
+    AppMonitor.capture('google_signin_popup', 'Google sign-in via popup', {
+      email: result.user.email
+    });
+    
+    // onAuthStateChanged will handle the rest
+    
+  } catch(popupError) {
+    console.warn('Popup failed:', popupError.code, popupError.message);
+    
+    if (popupError.code === 'auth/popup-blocked' || 
+        popupError.code === 'auth/popup-closed-by-user' ||
+        popupError.code === 'auth/cancelled-popup-request') {
+      
+      if (popupError.code === 'auth/popup-closed-by-user') {
+        // User deliberately closed — don't redirect
+        console.log('User closed popup, not redirecting');
+        resetBtn();
+        isSigningIn = false;
+        return;
+      }
+      
+      // Popup blocked by browser — try redirect
+      console.log('Popup blocked, falling back to redirect...');
+      try {
+        // Store intent so we know to handle result on reload
+        sessionStorage.setItem('_gauth_redirect', '1');
+        
+        // Log to AppMonitor
+        AppMonitor.capture('google_signin_redirect_fallback', 'Falling back to redirect', {
+          reason: popupError.code
+        });
+        
+        await signInWithRedirect(auth, provider);
+        // Page will reload — execution stops here
+      } catch(redirectError) {
+        console.error('Redirect also failed:', redirectError);
+        AppMonitor.logFailure('google_signin_redirect', redirectError.message, redirectError);
+        resetBtn();
+        isSigningIn = false;
+        showToast('Sign-in failed. Please try phone number instead.');
+      }
+      
+    } else if (popupError.code === 'auth/operation-not-allowed') {
+      resetBtn();
+      isSigningIn = false;
+      showToast('Google sign-in is not enabled. Please use phone number.');
+      
+    } else if (popupError.code === 'auth/network-request-failed') {
+      resetBtn();
+      isSigningIn = false;
+      showToast('No internet connection. Check your network and try again.');
+      
     } else {
-      console.log('🔄 Using redirect sign-in (Mobile)...');
-      console.log('💡 This is more reliable on mobile devices');
-      await signInWithRedirect(auth,new GoogleAuthProvider());
-      // Don't return here - let the redirect happen
-      return;
+      resetBtn();
+      isSigningIn = false;
+      console.error('Google sign-in error:', popupError);
+      AppMonitor.logFailure('google_signin', popupError.message, popupError);
+      showToast('Google sign-in failed. Try phone number instead.');
     }
-    console.log('═══════════════════════════════════════════════════\n');
-  }catch(e){
-    console.error('❌ GOOGLE SIGN-IN ERROR');
-    console.error('Error code:', e?.code);
-    console.error('Error message:', e?.message);
-    console.error('Full error:', e);
-    console.log('═══════════════════════════════════════════════════');
-    console.log('💡 TROUBLESHOOTING:');
-    console.log('1. If on mobile PWA, try opening in browser instead');
-    console.log('2. Clear browser cache and cookies');
-    console.log('3. Try incognito/private mode');
-    console.log('4. Check if pop-ups are blocked');
-    console.log('5. Try a different browser (Chrome recommended)');
-    console.log('═══════════════════════════════════════════════════\n');
-    isSigningIn = false; // Reset flag on error
-    
-    // Show user-friendly error message
-    let errorMsg = 'Sign-in failed. Please try again.';
-    if(e?.code === 'auth/popup-blocked') {
-      errorMsg = 'Pop-up blocked. Please allow pop-ups and try again.';
-    } else if(e?.code === 'auth/popup-closed-by-user') {
-      errorMsg = 'Sign-in cancelled. Please try again.';
-    } else if(e?.code === 'auth/network-request-failed') {
-      errorMsg = 'Network error. Check your connection and try again.';
-    } else if(isMobile() && isStandalonePWA()) {
-      errorMsg = 'Try opening in your browser instead of the app.';
-    }
-    showToast(errorMsg);
-    
-    if(btn){ btn.disabled=false; btn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> Continue with Google'; }
-    const code=e?.code||''; const msg=e?.message||'Sign in failed';
-    if(code.includes('popup-blocked')||code.includes('cancelled')) showToast('Popup blocked — tap ⋮ menu → Open in Chrome');
-    else if(code.includes('auth/')) showToast(msg.includes('network')?'Check internet & retry':'Sign in failed — try again');
-    else showToast('Sign in failed — try again');
   }
 };
 window.doSignOut=async()=>{
@@ -2254,9 +2658,11 @@ onAuthStateChanged(auth,async user=>{
     console.log('\n═══════════════════════════════════════════════════');
     console.log('🔐 AUTH STATE CHANGED - User signed in');
     console.log('═══════════════════════════════════════════════════');
-    console.log('User:', user.displayName || user.email);
+    console.log('User:', user.displayName || user.phoneNumber || user.email || 'User');
     console.log('User ID:', user.uid);
-    console.log('Email:', user.email);
+    console.log('Email:', user.email || 'none');
+    console.log('Phone:', user.phoneNumber || 'none');
+    console.log('Provider:', user.providerData[0]?.providerId || 'unknown');
     console.log('═══════════════════════════════════════════════════');
     
     // Handle redirect result and give time for auth to propagate
@@ -2334,11 +2740,16 @@ onAuthStateChanged(auth,async user=>{
       await new Promise(r=>setTimeout(r,1500));
     }
     setAvatars(user);
-    document.getElementById('mu-name').textContent=user.displayName||'User';
-    document.getElementById('mu-email').textContent=user.email||'';
-    document.getElementById('settings-user-name').textContent=user.displayName||'User';
-    document.getElementById('settings-user-email').textContent=user.email||'';
-    document.getElementById('pin-user-name').textContent=user.displayName?.split(' ')[0]||'Welcome back';
+    // Support both Google and phone auth users
+    const displayName = user.displayName || user.phoneNumber || user.email || 'User';
+    const displayEmail = user.email || user.phoneNumber || '';
+    const firstName = user.displayName?.split(' ')[0] || user.phoneNumber || 'Welcome back';
+    
+    document.getElementById('mu-name').textContent=displayName;
+    document.getElementById('mu-email').textContent=displayEmail;
+    document.getElementById('settings-user-name').textContent=displayName;
+    document.getElementById('settings-user-email').textContent=displayEmail;
+    document.getElementById('pin-user-name').textContent=firstName;
     try{
       // Check for deep link invite first (from URL or localStorage)
       let pendingInvite=LS.get('pending_invite');
@@ -2541,12 +2952,21 @@ onAuthStateChanged(auth,async user=>{
       const hintEl = document.getElementById('login-invite-hint');
       if(hintEl) hintEl.style.display = 'block';
       const sub=document.querySelector('#scr-login .login-sub');
-      if(sub) sub.innerHTML='Sign in with Google to join your<br>family space — your invite code is ready.';
+      if(sub) sub.innerHTML='Sign in to join your<br>family space — your invite code is ready.';
     } else {
       console.log('📋 No pending invite, showing normal login');
       showScreen('scr-login');
       // Hide invite hint
       const hintEl = document.getElementById('login-invite-hint');
+      if(hintEl) hintEl.style.display = 'none';
+      
+      // Check for in-app browser and show warning
+      if (window.detectInAppBrowser && window.detectInAppBrowser()) {
+        var warning = document.getElementById('login-inapp-warning');
+        if (warning) warning.style.display = 'block';
+        var googleBtn = document.getElementById('btn-google-signin');
+        if (googleBtn) googleBtn.style.display = 'none';
+      }
       if(hintEl) hintEl.style.display = 'none';
     }
   }
@@ -2855,10 +3275,18 @@ window.finishSetup=async()=>{
       savingsGoal:setupData.config.savings||0,
       members:[CU.uid],
       primaryOwner:CU.uid,
-      memberProfiles:{[CU.uid]:{name:setupData.userName||CU.displayName,email:CU.email,role:'primary',emoji:'👑',uid:CU.uid}},
+      memberProfiles:{[CU.uid]:{name:setupData.userName||CU.displayName||CU.phoneNumber,email:CU.email||null,phoneNumber:CU.phoneNumber||null,role:'primary',emoji:'👑',uid:CU.uid}},
       createdAt:serverTimestamp()
     });
-    await setDoc(doc(db,'users',CU.uid),{familyId:FID,role:'primary',name:setupData.userName||CU.displayName,email:CU.email});
+    await setDoc(doc(db,'users',CU.uid),{
+      familyId:FID,
+      role:'primary',
+      name:setupData.userName||CU.displayName||CU.phoneNumber||CU.email||'User',
+      email:CU.email||null,
+      phoneNumber:CU.phoneNumber||null,
+      provider:CU.providerData[0]?.providerId||'unknown',
+      createdAt:serverTimestamp()
+    });
     LS.set('familyos_family_name',setupData.familyName);
     await loadAndSubscribe();
   }catch(e){ btn.disabled=false; btn.textContent='Launch FamilyOS →'; showToast('Error: '+e.message); }
