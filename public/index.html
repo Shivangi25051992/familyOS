@@ -3414,6 +3414,8 @@ function subscribeData(){
   // Subscribe to own family's health profiles
   const u5=onSnapshot(query(collection(db,fp+'/healthProfiles'),orderBy('createdAt','desc')),s=>{ 
     const ownProfiles = s.docs.map(d=>({id:d.id,...d.data(),familyId:FID}));
+    console.log('📊 Own family profiles loaded:', ownProfiles.length, 'profiles');
+    ownProfiles.forEach(p => console.log('  - Own profile:', p.name, '(familyId:', p.familyId, ', sharedWith:', p.sharedWith || 'none', ')'));
     data.healthProfiles = [...ownProfiles, ...(data.sharedHealthProfiles || [])];
     renderHealthProfiles(); 
     if(activeHealthProfileId) subscribeActivePatient(); 
@@ -5427,9 +5429,30 @@ function renderHealthProfiles() {
   const listEl = document.getElementById('health-profiles-list');
   if(!listEl) return;
   
-  // Separate owned and shared profiles
-  const ownedProfiles = data.healthProfiles.filter(p => !p.sharedWith || !p.sharedWith.includes(CU.uid));
-  const sharedProfiles = data.healthProfiles.filter(p => p.sharedWith && p.sharedWith.includes(CU.uid));
+  console.log('\n🔍 RENDERING HEALTH PROFILES');
+  console.log('Current User ID:', CU?.uid);
+  console.log('Current Family ID (FID):', FID);
+  console.log('Total profiles in data.healthProfiles:', data.healthProfiles.length);
+  
+  // CRITICAL FIX: Only show profiles from MY family or explicitly shared with me
+  // Owned profiles: belong to my family AND not shared with me (or I'm the creator)
+  const ownedProfiles = data.healthProfiles.filter(p => {
+    const isMyFamily = p.familyId === FID;
+    const isSharedWithMe = p.sharedWith && p.sharedWith.includes(CU.uid);
+    const shouldShow = isMyFamily && !isSharedWithMe;
+    console.log(`  Profile: ${p.name} | familyId: ${p.familyId} | myFamily: ${isMyFamily} | sharedWithMe: ${isSharedWithMe} | showAsOwned: ${shouldShow}`);
+    return shouldShow;
+  });
+  
+  // Shared profiles: explicitly shared with me (from any family)
+  const sharedProfiles = data.healthProfiles.filter(p => {
+    const isShared = p.sharedWith && p.sharedWith.includes(CU.uid);
+    console.log(`  Profile: ${p.name} | sharedWith: ${p.sharedWith || 'none'} | showAsShared: ${isShared}`);
+    return isShared;
+  });
+  
+  console.log('Owned profiles to display:', ownedProfiles.length);
+  console.log('Shared profiles to display:', sharedProfiles.length);
   
   if(!data.healthProfiles.length) {
     listEl.innerHTML = `<div class="empty"><div class="empty-icon">🏥</div><div class="empty-text">No health profiles yet</div></div>`;
