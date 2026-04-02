@@ -2948,6 +2948,16 @@ onAuthStateChanged(auth,async user=>{
       console.log('📋 Pending invite found, showing login with hint');
       // Show login — after sign-in the auth handler will pick up pending_invite
       showScreen('scr-login');
+      
+      // Check for in-app browser and show warning
+      if (window.detectInAppBrowser && window.detectInAppBrowser()) {
+        console.log('⚠️ In-app browser detected');
+        var warning = document.getElementById('login-inapp-warning');
+        if (warning) warning.style.display = 'block';
+        var googleBtn = document.getElementById('btn-google-signin');
+        if (googleBtn) googleBtn.style.opacity = '0.5';
+      }
+      
       // Show join hint on login screen
       const hintEl = document.getElementById('login-invite-hint');
       if(hintEl) hintEl.style.display = 'block';
@@ -2956,6 +2966,16 @@ onAuthStateChanged(auth,async user=>{
     } else {
       console.log('📋 No pending invite, showing normal login');
       showScreen('scr-login');
+      
+      // Check for in-app browser and show warning
+      if (window.detectInAppBrowser && window.detectInAppBrowser()) {
+        console.log('⚠️ In-app browser detected');
+        var warning = document.getElementById('login-inapp-warning');
+        if (warning) warning.style.display = 'block';
+        var googleBtn = document.getElementById('btn-google-signin');
+        if (googleBtn) googleBtn.style.opacity = '0.5';
+      }
+      
       // Hide invite hint
       const hintEl = document.getElementById('login-invite-hint');
       if(hintEl) hintEl.style.display = 'none';
