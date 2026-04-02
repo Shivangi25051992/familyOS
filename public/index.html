@@ -519,13 +519,21 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 <div id="scr-loading" class="screen active">
   <div class="logo-text">FamilyOS.</div>
   <div class="ring"></div>
-  <div class="init-text">v3 · Initialising</div>
+  <div class="init-text" id="loading-text">v3 · Initialising</div>
   <div id="loading-fallback" style="display:none;margin-top:24px">
     <button class="btn-ghost" onclick="document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('scr-login').classList.add('active');">Continue to sign in →</button>
   </div>
 </div>
 <script>
 (function(){
+  // Check if returning from OAuth redirect
+  var params = new URLSearchParams(window.location.search);
+  var hasOAuthParams = params.get('code') || params.get('state') || window.location.hash.includes('access_token');
+  if (hasOAuthParams) {
+    var loadingText = document.getElementById('loading-text');
+    if (loadingText) loadingText.textContent = 'Completing sign-in...';
+  }
+  
   setTimeout(function(){
     var loading=document.getElementById('scr-loading');
     if(loading&&loading.classList.contains('active')){
@@ -586,6 +594,11 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     <div id="join-status" style="text-align:center;font-size:12px;color:var(--gold);font-family:'DM Mono',monospace;margin-bottom:12px;min-height:18px"></div>
     <button class="btn-primary" id="btn-join" onclick="joinWithCode()" style="margin-bottom:10px">Join Family Space →</button>
     <button class="btn-primary muted" onclick="showScreen('scr-login')">← Back to Sign In</button>
+    <div style="margin-top:24px;padding:12px;background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.2);border-radius:8px;font-size:11px;color:var(--text-faint);text-align:center;line-height:1.6">
+      💡 <strong style="color:var(--text)">First time?</strong><br>
+      1. Sign in with Google first<br>
+      2. Then enter your invite code here
+    </div>
   </div>
 </div>
 
