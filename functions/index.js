@@ -113,6 +113,24 @@ const SOURCE_TO_CATEGORY = {
   axis: "Utilities",
 };
 
+// ── RATE LIMITING ─────────────────────────────
+// Per-family throttle stored in Firestore _rateLimits subcollection.
+// Only Cloud Functions can write this subcollection (rules deny client access).
+async function checkRateLimit(fid, key, minIntervalMs) {
+  const ref = db.collection("families").doc(fid).collection("_rateLimits").doc(key);
+  const snap = await ref.get();
+  const now = Date.now();
+  if (snap.exists) {
+    const lastCallAt = snap.data().lastCallAt?.toMillis?.() || 0;
+    if (now - lastCallAt < minIntervalMs) {
+      const waitSec = Math.ceil((minIntervalMs - (now - lastCallAt)) / 1000);
+      throw new Error(`Rate limited — try again in ${waitSec}s`);
+    }
+  }
+  await ref.set({ lastCallAt: Timestamp.fromMillis(now) }, { merge: true });
+}
+// ─────────────────────────────────────────────
+
 function getSourceFromSender(fromAddr) {
   const lower = (fromAddr || "").toLowerCase();
   for (const [source, addrs] of Object.entries(SENDER_MAP)) {
@@ -689,6 +707,7 @@ exports.syncGmailExpenses = onCall(
   async (request) => {
     const { fid, debug } = request.data || {};
     if (!fid) throw new Error("fid required");
+    await checkRateLimit(fid, "syncGmail", 60_000); // 1 call per minute per family
     const result = await doSyncGmailExpenses(fid, { debug });
     return result;
   }
@@ -740,6 +759,8 @@ exports.generateExpenseInsights = onCall(
     const members = fam.members || [];
     const isMember = members.includes(uid) || fam.memberProfiles?.[uid];
     if (!isMember) throw new Error("Not a member of this family");
+
+    await checkRateLimit(fid, "generateInsights", 300_000); // 1 call per 5 min per family
 
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -1078,5 +1099,140 @@ exports.disconnectGmail = onCall(
 
     await famRef.update({ gmailSync: FieldValue.delete() });
     return { success: true };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION: parseReceiptOCR — server-side OCR proxy for expense receipts
+// Replaces direct browser→Anthropic calls in parseReceiptWithOCR() and parsePastedText()
+// ─────────────────────────────────────────────────────────────────────────────
+exports.parseReceiptOCR = onCall(
+  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY] },
+  async (request) => {
+    const { fid, base64Image, mediaType, pastedText } = request.data || {};
+    if (!fid) throw new Error("fid required");
+    if (!base64Image && !pastedText) throw new Error("base64Image or pastedText required");
+
+    const uid = request.auth?.uid;
+    if (!uid) throw new Error("Unauthenticated");
+
+    const famSnap = await db.collection("families").doc(fid).get();
+    if (!famSnap.exists) throw new Error("Family not found");
+
+    const fam = famSnap.data();
+    const isMember = (fam.members || []).includes(uid) || fam.memberProfiles?.[uid];
+    if (!isMember) throw new Error("Not a member of this family");
+
+    await checkRateLimit(fid, "parseReceiptOCR", 10_000); // 1 call per 10s per family
+
+    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+    const prompt = 'Extract expense details. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.';
+
+    let messages;
+    if (base64Image) {
+      messages = [{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: base64Image } },
+        { type: "text", text: prompt },
+      ]}];
+    } else {
+      messages = [{ role: "user", content: `Parse this pasted text for expense details. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.\n\n${pastedText.slice(0, 2000)}` }];
+    }
+
+    const msg = await anthropic.messages.create({
+      model: LLM_MODELS.receiptOcr,
+      max_tokens: 256,
+      messages,
+    });
+
+    const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    return { result: jsonMatch ? JSON.parse(jsonMatch[0]) : null };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION: healthAskAI — server-side Claude text proxy for health Q&A
+// Replaces direct browser→Anthropic calls in callClaudeHealth()
+// ─────────────────────────────────────────────────────────────────────────────
+exports.healthAskAI = onCall(
+  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY] },
+  async (request) => {
+    const { fid, prompt, context, isCompassionatePersona, model } = request.data || {};
+    if (!fid || !prompt) throw new Error("fid and prompt required");
+
+    const uid = request.auth?.uid;
+    if (!uid) throw new Error("Unauthenticated");
+
+    const famSnap = await db.collection("families").doc(fid).get();
+    if (!famSnap.exists) throw new Error("Family not found");
+
+    const fam = famSnap.data();
+    const isMember = (fam.members || []).includes(uid) || fam.memberProfiles?.[uid];
+    if (!isMember) throw new Error("Not a member of this family");
+
+    await checkRateLimit(fid, "healthAskAI", 30_000); // 1 call per 30s per family
+
+    const systemPrompt = isCompassionatePersona
+      ? "You are a compassionate medical information assistant helping an Indian family caregiver understand their family member's medical condition. Answer questions clearly and compassionately in simple language. ALWAYS recommend consulting the treating doctor for any treatment decisions. Be honest about uncertainty. Avoid jargon. Answer in the same language the question is asked (Hindi or English)."
+      : "You are a medical data summarizer. Be concise, clear, and compassionate.";
+
+    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+    const safeModel = model || "claude-haiku-4-5-20251001";
+
+    const msg = await anthropic.messages.create({
+      model: safeModel,
+      max_tokens: 1000,
+      system: systemPrompt + (context ? `\n\nContext:\n${context}` : ""),
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
+    return { text };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION: analyzeHealthMedia — server-side Claude vision proxy
+// Replaces direct browser→Anthropic calls in callClaudeVision()
+// ─────────────────────────────────────────────────────────────────────────────
+exports.analyzeHealthMedia = onCall(
+  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY] },
+  async (request) => {
+    const { fid, base64Image, mediaType, systemPrompt, userPrompt, model } = request.data || {};
+    if (!fid || !base64Image || !systemPrompt || !userPrompt) {
+      throw new Error("fid, base64Image, systemPrompt, and userPrompt required");
+    }
+
+    const uid = request.auth?.uid;
+    if (!uid) throw new Error("Unauthenticated");
+
+    const famSnap = await db.collection("families").doc(fid).get();
+    if (!famSnap.exists) throw new Error("Family not found");
+
+    const fam = famSnap.data();
+    const isMember = (fam.members || []).includes(uid) || fam.memberProfiles?.[uid];
+    if (!isMember) throw new Error("Not a member of this family");
+
+    await checkRateLimit(fid, "analyzeHealthMedia", 30_000); // 1 call per 30s per family
+
+    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
+    const safeModel = model || "claude-sonnet-4-20250514";
+    const safeMediaType = mediaType || "image/jpeg";
+
+    const msg = await anthropic.messages.create({
+      model: safeModel,
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: safeMediaType, data: base64Image } },
+          { type: "text", text: userPrompt },
+        ],
+      }],
+    });
+
+    const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
+    return { text };
   }
 );

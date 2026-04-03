@@ -50,6 +50,11 @@ service cloud.firestore {
           allow read, write: if isFamilyMember(familyId);
         }
       }
+
+      // Rate limit state — written only by Cloud Functions (server-side admin SDK bypasses rules)
+      match /_rateLimits/{doc} {
+        allow read, write: if false;
+      }
     }
 
     // Invitations — created by Cloud Function (createInvite); anyone with code can read; joiner or creator can update
