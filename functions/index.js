@@ -902,18 +902,26 @@ exports.joinWithInviteCode = onCall({ cors: CORS_ORIGINS }, async (request) => {
   const displayName = request.auth?.token?.name || "Member";
   const email = request.auth?.token?.email || "";
 
+  const phoneNumber = request.auth?.token?.phone_number || null;
+
   const batch = db.batch();
   batch.set(db.collection("users").doc(uid), {
+    uid: uid, // SECURITY: Always include uid
     familyId: fid,
     role: "secondary",
     name: displayName,
     email,
+    phoneNumber: phoneNumber,
+    createdAt: FieldValue.serverTimestamp(),
+    lastLoginAt: FieldValue.serverTimestamp()
   });
   batch.update(famRef, {
     members: FieldValue.arrayUnion(uid),
+    memberUids: FieldValue.arrayUnion(uid), // SECURITY: Flat array for Firestore rules
     [`memberProfiles.${uid}`]: {
       name: displayName,
       email,
+      phoneNumber: phoneNumber,
       role: "secondary",
       emoji: "👩",
       uid,
@@ -934,7 +942,11 @@ exports.joinWithInviteCode = onCall({ cors: CORS_ORIGINS }, async (request) => {
       },
     },
   });
-  batch.update(invRef, { used: true, usedBy: uid });
+  batch.update(invRef, { 
+    used: true, 
+    usedBy: uid,
+    usedAt: FieldValue.serverTimestamp()
+  });
   await batch.commit();
 
   return { fid };
@@ -953,23 +965,66 @@ exports.createInvite = onCall({ cors: CORS_ORIGINS }, async (request) => {
 
   const fam = famSnap.data();
   const members = fam.members || [];
-  const isMember = members.includes(uid) || fam.memberProfiles?.[uid];
+  const memberUids = fam.memberUids || members;
+  const isMember = memberUids.includes(uid) || fam.memberProfiles?.[uid];
   if (!isMember) throw new Error("Not a member of this family");
+
+  // SECURITY: Only family owner can create invites
+  if (fam.primaryOwner !== uid) {
+    throw new Error("Only the family owner can create invites");
+  }
 
   const profileCount = Object.keys(fam.memberProfiles || {}).length;
   if (profileCount >= 5) throw new Error("Max 5 members reached");
 
-  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  // RATE LIMITING: Check for existing active invites
+  const now = Date.now();
+  const existingInvitesSnapshot = await db.collection("invitations")
+    .where("familyId", "==", fid)
+    .where("used", "==", false)
+    .where("expires", ">", now)
+    .get();
+
+  // If 3 or more active invites exist, return the most recent one instead of creating new
+  if (existingInvitesSnapshot.size >= 3) {
+    const mostRecent = existingInvitesSnapshot.docs
+      .sort((a, b) => (b.data().createdAt || 0) - (a.data().createdAt || 0))[0];
+    const existingCode = mostRecent.data().code;
+    console.log('Rate limit: Returning existing invite', existingCode, 'instead of creating new');
+    return { 
+      code: existingCode,
+      isExisting: true,
+      message: "Using existing invite (max 3 active at once)"
+    };
+  }
+
+  // Generate unique code
+  let code;
+  let attempts = 0;
+  do {
+    code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const existing = await db.collection("invitations").doc(code).get();
+    if (!existing.exists) break;
+    attempts++;
+  } while (attempts < 5);
+
+  if (attempts >= 5) throw new Error("Could not generate unique code");
+
+  // Create new invitation
   await db.collection("invitations").doc(code).set({
     familyId: fid,
     code,
     createdBy: uid,
-    expires: Date.now() + 86400000,
+    createdByName: request.auth?.token?.name || "Owner",
+    createdAt: FieldValue.serverTimestamp(),
+    expires: now + 86400000, // 24 hours
     used: false,
+    usedBy: null,
+    usedAt: null,
     familyName: fam.name || "Family",
   });
 
-  return { code };
+  return { code, isExisting: false };
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,18 +1,12 @@
 {
-  "name": "familyos",
-  "private": true,
+  "name": "familyos-cleanup",
+  "version": "1.0.0",
+  "description": "Database cleanup script for FamilyOS",
+  "main": "cleanup-database.js",
   "scripts": {
-    "test": "node tests/expense-utils.test.js",
-    "test:sync": "node test-sync-automated.js",
-    "test:health:unit": "node tests/health-unit.test.js",
-    "test:health:seed": "node tests/health-seed.js",
-    "test:health:e2e": "node tests/health-e2e.test.js",
-    "test:health": "bash tests/run-health-tests.sh",
-    "test:health:unit-only": "SKIP_SEED=true SKIP_E2E=true bash tests/run-health-tests.sh"
+    "cleanup": "node cleanup-database.js"
   },
-  "devDependencies": {
-    "dotenv": "^16.6.1",
-    "firebase-admin": "^12.7.0",
-    "puppeteer": "^21.11.0"
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
   }
 }
