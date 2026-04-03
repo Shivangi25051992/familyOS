@@ -221,7 +221,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .tg-blue{background:var(--blue-soft);color:var(--blue)}
 .tg-purple{background:var(--purple-soft);color:var(--purple)}
 .tg-orange{background:var(--orange-soft);color:var(--orange)}
+.tg-pink{background:rgba(236,72,153,0.12);color:rgb(236,72,153)}
+.tg-gray{background:var(--text-ghost);color:var(--text-dim)}
 .tg-dim{background:var(--text-ghost);color:var(--text-dim)}
+
+/* ── SYMPTOM DIARY ── */
+.severity-btn{width:50px;height:50px;border-radius:50%;border:2px solid var(--gold-border);background:var(--card);color:var(--text-dim);font-size:16px;font-weight:700;cursor:pointer;transition:all 0.2s}
+.severity-btn:hover{border-color:var(--gold);transform:scale(1.05)}
+.severity-btn.selected{border-color:var(--gold);background:var(--gold);color:var(--bg);transform:scale(1.1)}
+.severity-btn[data-severity="1"].selected{background:var(--green);border-color:var(--green)}
+.severity-btn[data-severity="2"].selected{background:#93c5fd;border-color:#93c5fd}
+.severity-btn[data-severity="3"].selected{background:var(--gold);border-color:var(--gold)}
+.severity-btn[data-severity="4"].selected{background:var(--orange);border-color:var(--orange)}
+.severity-btn[data-severity="5"].selected{background:var(--red);border-color:var(--red)}
 
 /* ── PROGRESS ── */
 .prog-wrap{background:var(--surface);border-radius:4px;height:4px;overflow:hidden;margin:10px 0}
@@ -1629,9 +1641,30 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">Add Patient <button class="modal-close" onclick="closeModal('modal-add-patient')">✕</button></div>
-    <div class="form-group"><label class="form-label">Name (e.g. Dad, Mom)</label><input class="form-input" id="hp-name" placeholder="Name"></div>
+    <div class="form-group"><label class="form-label">Name (e.g. Dad, Mom, Me)</label><input class="form-input" id="hp-name" placeholder="Name"></div>
     <div class="form-group"><label class="form-label">Relation</label>
-      <select class="form-select" id="hp-relation"><option>Father</option><option>Mother</option><option>Spouse</option><option>Child</option><option>Other</option></select></div>
+      <select class="form-select" id="hp-relation"><option>Self</option><option>Father</option><option>Mother</option><option>Spouse</option><option>Child</option><option>Other</option></select></div>
+    <div class="form-group"><label class="form-label">Condition Type</label>
+      <select class="form-select" id="hp-conditionType">
+        <option value="">Select condition...</option>
+        <option value="Cancer">🎗️ Cancer</option>
+        <option value="Diabetes">🩸 Diabetes</option>
+        <option value="Hypertension">❤️ Hypertension</option>
+        <option value="Thyroid">🦋 Thyroid</option>
+        <option value="Heart Disease">💔 Heart Disease</option>
+        <option value="Kidney Disease">🫘 Kidney Disease</option>
+        <option value="Obesity/Fatty Liver">⚖️ Obesity/Fatty Liver</option>
+        <option value="PCOS/PCOD">👩 PCOS/PCOD</option>
+        <option value="Asthma/COPD">🫁 Asthma/COPD</option>
+        <option value="Arthritis">🦴 Arthritis</option>
+        <option value="Fitness & Wellness">💪 Fitness & Wellness</option>
+        <option value="Post-Surgery Recovery">🏥 Post-Surgery Recovery</option>
+        <option value="Mental Health">🧠 Mental Health</option>
+        <option value="Pregnancy">🤰 Pregnancy</option>
+        <option value="Other">📋 Other</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Helps customize vitals tracking and insights</div>
+    </div>
     <div class="form-group"><label class="form-label">Diagnosis</label><input class="form-input" id="hp-diagnosis" placeholder="e.g. Stage 4 Lung Cancer"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group"><label class="form-label">Diagnosed On</label><input class="form-input" id="hp-diagnosedOn" type="date"></div>
@@ -1793,6 +1826,43 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       </div>
     </div>
     <button class="btn-primary" onclick="saveReportDate()" style="width:100%">Save Date</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-doctor-summary">
+  <div class="modal" style="max-width:600px;max-height:90vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 Doctor Summary <button class="modal-close" onclick="closeModal('modal-doctor-summary')">✕</button></div>
+    <div id="doctor-summary-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-symptom-diary">
+  <div class="modal" style="max-width:450px">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🩺 Log Symptom <button class="modal-close" onclick="closeModal('modal-symptom-diary')">✕</button></div>
+    <div class="form-group">
+      <label class="form-label">Symptom</label>
+      <input class="form-input" id="symptom-name" placeholder="e.g. Headache, Nausea, Fatigue" style="font-size:14px">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Severity (1 = Mild, 5 = Severe)</label>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="severity-btn" data-severity="1" onclick="selectSeverity(1)">1</button>
+        <button class="severity-btn" data-severity="2" onclick="selectSeverity(2)">2</button>
+        <button class="severity-btn" data-severity="3" onclick="selectSeverity(3)">3</button>
+        <button class="severity-btn" data-severity="4" onclick="selectSeverity(4)">4</button>
+        <button class="severity-btn" data-severity="5" onclick="selectSeverity(5)">5</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:6px;text-align:center">
+        <span id="severity-label">Select severity level</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (optional)</label>
+      <textarea class="form-input" id="symptom-notes" placeholder="Any additional details..." rows="3" style="resize:vertical"></textarea>
+    </div>
+    <button class="btn-primary" onclick="saveSymptom()" style="width:100%">Log Symptom</button>
   </div>
 </div>
 
@@ -4953,6 +5023,7 @@ window.renderInterior=renderInterior;
 async function saveHealthProfile() {
   const name = document.getElementById('hp-name').value.trim();
   const relation = document.getElementById('hp-relation').value;
+  const conditionType = document.getElementById('hp-conditionType').value;
   const diagnosis = document.getElementById('hp-diagnosis').value.trim();
   const diagnosedOn = document.getElementById('hp-diagnosedOn').value;
   const bloodGroup = document.getElementById('hp-bloodGroup').value.trim();
@@ -4963,7 +5034,9 @@ async function saveHealthProfile() {
 
   try {
     const payload = {
-      name, relation, diagnosis, diagnosedOn, bloodGroup,
+      name, relation, 
+      conditionType: conditionType || 'Other',
+      diagnosis, diagnosedOn, bloodGroup,
       treatingHospital: hospital, treatingDoctor: doctor,
       createdBy: CU.uid,
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
@@ -4974,6 +5047,132 @@ async function saveHealthProfile() {
     openPatientDashboard(docRef.id);
   } catch(e) { console.error(e); showToast('Error saving profile'); }
 }
+
+// ── SYMPTOM DIARY ──
+let _selectedSeverity = null;
+
+function buildSymptomDiaryHtml(symptoms, isShared) {
+  const recent = symptoms.slice(0, 5);
+  
+  if (recent.length === 0 && isShared) return ''; // Don't show empty section for shared users
+  
+  return `
+    <div class="health-card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="health-card-title">🩺 Symptom Diary</div>
+        ${!isShared ? '<button class="btn-sm" onclick="openSymptomDiaryModal()">+ Log</button>' : ''}
+      </div>
+      ${recent.length > 0 ? recent.map(s => `
+        <div style="display:flex;gap:12px;padding:10px;background:var(--surface);border-radius:var(--r-sm);margin-bottom:8px">
+          <div style="width:40px;height:40px;border-radius:50%;background:${getSeverityColor(s.severity)};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;flex-shrink:0">${s.severity}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px">${safeHtml(s.symptom)}</div>
+            ${s.notes ? '<div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">' + safeHtml(s.notes) + '</div>' : ''}
+            <div style="font-size:10px;color:var(--text-faint)">${formatReportDate(s.date)} · ${getSeverityLabel(s.severity)}</div>
+          </div>
+        </div>
+      `).join('') : '<div style="font-size:12px;color:var(--text-faint);text-align:center;padding:20px">No symptoms logged yet</div>'}
+    </div>
+  `;
+}
+
+function getSeverityColor(severity) {
+  const colors = {
+    1: 'var(--green)',
+    2: '#93c5fd',
+    3: 'var(--gold)',
+    4: 'var(--orange)',
+    5: 'var(--red)'
+  };
+  return colors[severity] || 'var(--text-dim)';
+}
+
+function getSeverityLabel(severity) {
+  const labels = {
+    1: 'Mild',
+    2: 'Mild-Moderate',
+    3: 'Moderate',
+    4: 'Moderate-Severe',
+    5: 'Severe'
+  };
+  return labels[severity] || 'Unknown';
+}
+
+window.openSymptomDiaryModal = function() {
+  if (window._isSharedHealthProfile) {
+    showToast('Read-only access - cannot log symptoms');
+    return;
+  }
+  
+  // Reset form
+  document.getElementById('symptom-name').value = '';
+  document.getElementById('symptom-notes').value = '';
+  _selectedSeverity = null;
+  
+  // Reset severity buttons
+  document.querySelectorAll('.severity-btn').forEach(btn => {
+    btn.classList.remove('selected');
+  });
+  document.getElementById('severity-label').textContent = 'Select severity level';
+  
+  openModal('modal-symptom-diary');
+  
+  // Focus on symptom input
+  setTimeout(() => {
+    document.getElementById('symptom-name').focus();
+  }, 100);
+};
+
+window.selectSeverity = function(severity) {
+  _selectedSeverity = severity;
+  
+  // Update button states
+  document.querySelectorAll('.severity-btn').forEach(btn => {
+    btn.classList.remove('selected');
+  });
+  const selectedBtn = document.querySelector(`.severity-btn[data-severity="${severity}"]`);
+  if (selectedBtn) selectedBtn.classList.add('selected');
+  
+  // Update label
+  document.getElementById('severity-label').textContent = getSeverityLabel(severity);
+};
+
+window.saveSymptom = async function() {
+  const symptomName = document.getElementById('symptom-name').value.trim();
+  const notes = document.getElementById('symptom-notes').value.trim();
+  
+  if (!symptomName) {
+    showToast('Please enter a symptom');
+    return;
+  }
+  
+  if (!_selectedSeverity) {
+    showToast('Please select severity level');
+    return;
+  }
+  
+  try {
+    const payload = {
+      symptom: symptomName,
+      severity: _selectedSeverity,
+      notes: notes || null,
+      date: new Date().toISOString().split('T')[0],
+      createdAt: serverTimestamp(),
+      createdBy: CU.uid
+    };
+    
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/symptoms`), payload);
+    
+    showToast('Symptom logged ✓');
+    closeModal('modal-symptom-diary');
+    
+    // Refresh overview to show new symptom
+    renderHealthTab();
+  } catch(e) {
+    console.error('Error logging symptom:', e);
+    showToast('Error logging symptom');
+  }
+};
 
 async function deleteHealthProfile() {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
@@ -5669,7 +5868,10 @@ function renderHealthProfiles() {
   if (ownedProfiles.length > 0) {
     html += ownedProfiles.map(p => `
       <div class="health-card" onclick="openPatientDashboard('${p.id}')">
-        <div class="health-card-title">${safeHtml(p.name)}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+          <div class="health-card-title">${safeHtml(p.name)}</div>
+          ${p.conditionType ? '<span class="tag tg-' + getConditionColor(p.conditionType) + '" style="font-size:9px;padding:2px 8px">' + safeHtml(p.conditionType) + '</span>' : ''}
+        </div>
         <div class="health-card-sub">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
         <div style="font-size:10px;color:var(--text-faint)">Last updated: ${p.updatedAt ? fmtDate(p.updatedAt.toDate()) : '—'}</div>
       </div>
@@ -5678,18 +5880,19 @@ function renderHealthProfiles() {
   
   // Shared profiles
   if (sharedProfiles.length > 0) {
-    html += '<div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;font-weight:600">Shared With You</div>';
+    html += '<div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;font-weight:600">📋 Shared With You</div>';
     html += sharedProfiles.map(p => {
       const members = data.members || [];
       const owner = members.find(m => m.uid === p.createdBy);
       return `
         <div class="health-card" onclick="openPatientDashboard('${p.id}')" style="border-left:3px solid var(--blue)">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+            <div style="flex:1">
               <div class="health-card-title">${safeHtml(p.name)} <span style="font-size:10px;color:var(--blue);background:rgba(100,150,255,0.1);padding:2px 6px;border-radius:4px;margin-left:6px">SHARED</span></div>
               <div class="health-card-sub">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
               <div style="font-size:10px;color:var(--text-faint)">Shared by ${safeHtml(owner?.name || 'Unknown')} · Read-only</div>
             </div>
+            ${p.conditionType ? '<span class="tag tg-' + getConditionColor(p.conditionType) + '" style="font-size:9px;padding:2px 8px;margin-left:8px">' + safeHtml(p.conditionType) + '</span>' : ''}
           </div>
         </div>
       `;
@@ -5822,7 +6025,7 @@ function scheduleRenderHealthTab() {
 function subscribeActivePatient() {
   if(!activeHealthProfileId) return;
   if(activePatientUnsubs.length) { activePatientUnsubs.forEach(u => u()); activePatientUnsubs = []; }
-  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [], chatHistory: [] };
+  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [], chatHistory: [], symptoms: [] };
 
   // Get the profile to determine which family it belongs to
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
@@ -5885,8 +6088,18 @@ function subscribeActivePatient() {
   } catch(e) {
     console.warn('Chat history query failed:', e);
   }
+  
+  let u10 = null;
+  try {
+    u10 = onSnapshot(query(collection(db, `${base}/symptoms`), orderBy('createdAt', 'desc'), limit(10)), s => {
+      activePatientData.symptoms = s.docs.map(d => ({id: d.id, ...d.data()})); 
+      if (activeHealthTab === 'overview') scheduleRenderHealthTab();
+    });
+  } catch(e) {
+    console.warn('Symptoms query failed:', e);
+  }
 
-  activePatientUnsubs = [u1, u2, u3, u4, u5].concat([u6, u6Fallback, u7, u8, u9].filter(Boolean));
+  activePatientUnsubs = [u1, u2, u3, u4, u5].concat([u6, u6Fallback, u7, u8, u9, u10].filter(Boolean));
 }
 
 function switchHealthTab(tab, btn) {
@@ -5939,6 +6152,8 @@ function renderHealthOverview() {
 function _renderHealthOverviewInner(el) {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if(!p) return;
+  
+  const isShared = window._isSharedHealthProfile;
 
   // Critical alert from most recent urgent report
   const urgentReport = activePatientData.reports.find(r => r.urgency === 'urgent');
@@ -6213,6 +6428,7 @@ function _renderHealthOverviewInner(el) {
     ${vitalsHtml}
     ${medScheduleHtml}
     ${markersHtml}
+    ${buildSymptomDiaryHtml(activePatientData.symptoms || [], isShared)}
 
     <div class="health-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -8269,6 +8485,28 @@ function timeAgoLabel(ms){
   return months + 'mo ago';
 }
 
+// Get color class for condition type badge
+function getConditionColor(conditionType) {
+  const colorMap = {
+    'Cancer': 'red',
+    'Diabetes': 'orange',
+    'Hypertension': 'red',
+    'Thyroid': 'blue',
+    'Heart Disease': 'red',
+    'Kidney Disease': 'orange',
+    'Obesity/Fatty Liver': 'orange',
+    'PCOS/PCOD': 'blue',
+    'Asthma/COPD': 'blue',
+    'Arthritis': 'orange',
+    'Fitness & Wellness': 'green',
+    'Post-Surgery Recovery': 'blue',
+    'Mental Health': 'purple',
+    'Pregnancy': 'pink',
+    'Other': 'gray'
+  };
+  return colorMap[conditionType] || 'gray';
+}
+
 function safeHtml(input) {
   if (input === null || input === undefined) return '';
   return String(input)
@@ -9187,25 +9425,101 @@ async function deleteVital(vitalId) {
 
 async function generateDoctorSummary() {
   if(!activeHealthProfileId) return;
-  showToast('Generating summary...');
+  
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   const medications = activePatientData.medications.filter(m => m.active !== false);
   const reports = activePatientData.reports.slice(0, 10);
+  const vitals = getLatestVitalSnapshot(activePatientData.vitals || []);
+  const symptoms = (activePatientData.symptoms || []).slice(0, 5);
   
-  const context = `Patient: ${p.relation}, ${p.diagnosis}. Diagnosed: ${p.diagnosedOn}. Meds: ${medications.map(m=>m.name).join(', ')}. Reports: ${reports.map(r=>r.title).join(', ')}.`;
-  const prompt = `Generate a clear medical summary for a new doctor who has never seen this patient before. Format it professionally but keep it concise. Include: diagnosis, timeline, current medications, recent test results, current status, key concerns.`;
+  // Show modal with loading state
+  const modalContent = document.getElementById('doctor-summary-content');
+  modalContent.innerHTML = `
+    <div style="text-align:center;padding:60px 20px">
+      <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px">Generating Summary...</div>
+      <div style="font-size:11px;color:var(--text-faint)">Analyzing patient data</div>
+    </div>
+  `;
+  openModal('modal-doctor-summary');
+  
+  const context = `Patient: ${p.name}, ${p.relation}, ${p.diagnosis}. Diagnosed: ${p.diagnosedOn || 'unknown'}. Condition: ${p.conditionType || 'Other'}. Meds: ${medications.map(m=>m.name + ' ' + m.dose).join(', ')}. Reports: ${reports.map(r=>'['+r.date+'] '+r.title+': '+r.aiSummary).join(' | ')}. Recent symptoms: ${symptoms.map(s=>s.symptom+' (severity '+s.severity+')').join(', ')}.`;
+  const prompt = `Generate a clear, professional medical summary for a new doctor who has never seen this patient before. Format with markdown headings and bullet points. Include: diagnosis & timeline, current medications with dosages, recent test results with key findings, recent symptoms, current status, and key concerns/recommendations.`;
   
   try {
-    const summary = await callClaudeHealth(prompt, context);
-    const win = window.open('', '_blank');
-    win.document.write(`<html><body style="font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:auto">
-      <h1 style="color:#C9A84C">Medical Summary: ${p.name}</h1>
-      <p style="white-space:pre-wrap">${summary}</p>
-      <hr style="margin:40px 0;opacity:0.2">
-      <p style="font-size:12px;color:#888;text-align:center">Generated by FamilyOS · Take a screenshot to share with your doctor</p>
-    </body></html>`);
-  } catch(e) { console.error(e); showToast('AI error'); }
+    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalQA, 1200);
+    
+    // Render summary in modal
+    modalContent.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:16px;margin-bottom:16px">
+        <div style="font-size:18px;font-weight:700;color:var(--gold);margin-bottom:8px">${safeHtml(p.name)}</div>
+        <div style="font-size:12px;color:var(--text-dim)">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
+        ${p.conditionType ? '<div style="margin-top:8px"><span class="tag tg-' + getConditionColor(p.conditionType) + '" style="font-size:10px">' + safeHtml(p.conditionType) + '</span></div>' : ''}
+      </div>
+      
+      <div id="doctor-summary-text" style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin-bottom:20px;max-height:400px;overflow-y:auto;padding:16px;background:var(--card);border-radius:var(--r-md)">${markdownToHtml(summary)}</div>
+      
+      <div style="display:flex;gap:10px">
+        <button class="btn-primary" onclick="copyDoctorSummary()" style="flex:1">
+          📋 Copy
+        </button>
+        <button class="btn-primary" onclick="shareDoctorSummary()" style="flex:1">
+          📤 Share
+        </button>
+      </div>
+      
+      <div style="font-size:11px;color:var(--text-faint);text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--gold-border)">
+        Generated by FamilyOS · ${new Date().toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'})}
+      </div>
+    `;
+  } catch(e) { 
+    console.error(e); 
+    modalContent.innerHTML = `
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">Error Generating Summary</div>
+        <div style="font-size:12px;color:var(--text-dim)">${e.message || 'Please try again'}</div>
+        <button class="btn-primary" onclick="generateDoctorSummary()" style="margin-top:20px">Retry</button>
+      </div>
+    `;
+  }
 }
+
+window.copyDoctorSummary = function() {
+  const text = document.getElementById('doctor-summary-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Summary copied to clipboard ✓');
+  }).catch(e => {
+    console.error('Copy failed:', e);
+    showToast('Copy failed - please select and copy manually');
+  });
+};
+
+window.shareDoctorSummary = function() {
+  const text = document.getElementById('doctor-summary-text').textContent;
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  
+  if (navigator.share) {
+    navigator.share({
+      title: `Medical Summary: ${p.name}`,
+      text: text
+    }).then(() => {
+      showToast('Shared successfully ✓');
+    }).catch(e => {
+      if (e.name !== 'AbortError') {
+        console.error('Share failed:', e);
+        showToast('Share cancelled');
+      }
+    });
+  } else {
+    // Fallback: copy to clipboard
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Summary copied - paste in your messaging app ✓');
+    }).catch(e => {
+      showToast('Sharing not supported - use Copy button');
+    });
+  }
+};
 
 function exportHealthPDF() {
   if(!activeHealthProfileId) return;
