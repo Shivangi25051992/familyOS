@@ -3,59 +3,16 @@
  * Run: node tests/expense-utils.test.js
  */
 
-// Mock FamilyOSExpenseUtils by loading the logic (Node doesn't have window)
-const MERCHANT_LINKS = {
-  myntra: 'myntra://app',
-  swiggy: 'swiggy://',
-  amazon: 'https://www.amazon.in/gp/your-orders',
-};
+// Load the real module — populates globalThis.FamilyOSExpenseUtils in Node.js
+require('../public/expense-utils.js');
 
-function extractOrderKey(exp) {
-  if (exp.orderDedupKey) return exp.orderDedupKey;
-  const merchant = (exp.merchant || exp.notes || exp.desc || '').toLowerCase().replace(/\s+/g, '');
-  const date = exp.date || '';
-  const amount = Number(exp.amount) || 0;
-  const desc = (exp.desc || exp.notes || '').toLowerCase();
-  const orderIdMatch = desc.match(/(?:order\s*#?\s*([a-z0-9\-]+)|#([a-z0-9\-]+))/i) ||
-    (exp.notes || '').match(/(?:order\s*#?\s*([a-z0-9\-]+)|#([a-z0-9\-]+))/i);
-  const orderId = orderIdMatch ? (orderIdMatch[1] || orderIdMatch[2] || '').trim() : exp.orderId || null;
-  if (orderId && merchant) return `${merchant.slice(0, 15)}_${orderId}`;
-  return `${merchant.slice(0, 15)}_${date}_${Math.round(amount / 50) * 50}`;
-}
-
-function consolidateExpenses(expenses) {
-  if (!expenses || !expenses.length) return [];
-  const groups = new Map();
-  expenses.forEach(exp => {
-    const key = extractOrderKey(exp);
-    const existing = groups.get(key);
-    if (existing) {
-      if (!existing._groupIds) existing._groupIds = [existing.id];
-      existing._groupIds.push(exp.id);
-      existing._count = (existing._count || 1) + 1;
-      if (exp.amount > (existing.amount || 0)) {
-        existing.amount = exp.amount;
-        existing.desc = exp.desc || existing.desc;
-      }
-    } else {
-      const copy = { ...exp, _groupIds: [exp.id], _count: 1 };
-      groups.set(key, copy);
-    }
-  });
-  return Array.from(groups.values());
-}
-
-function getSpendingByCategory(expenses, monthStr) {
-  const filtered = monthStr
-    ? expenses.filter(e => (e.date || '').startsWith(monthStr))
-    : expenses;
-  const byCat = {};
-  filtered.forEach(e => {
-    const c = e.cat || 'Other';
-    byCat[c] = (byCat[c] || 0) + (e.amount || 0);
-  });
-  return Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-}
+const {
+  consolidateExpenses,
+  getSpendingByCategory,
+  getSpendingByMerchant,
+  getMerchantLink,
+  extractOrderKey,
+} = globalThis.FamilyOSExpenseUtils;
 
 let passed = 0;
 let failed = 0;

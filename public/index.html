@@ -359,6 +359,29 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 .cal-num{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600}
 .cal-day.today .cal-num{color:var(--gold)}
 
+/* ── FULL CALENDAR ── */
+.cal-full-wrap{background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.cal-nav-btn{background:none;border:1px solid var(--gold-border);border-radius:var(--r-sm);color:var(--text);padding:4px 14px;cursor:pointer;font-size:18px;line-height:1}
+.cal-nav-btn:active{background:var(--gold-soft)}
+.cal-month-label{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:var(--gold)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-grid .cal-dow{text-align:center;padding:4px 0;font-size:9px;color:var(--text-faint);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.5px}
+.cal-grid .cal-day{display:flex;flex-direction:column;align-items:center;padding:6px 2px;border-radius:var(--r-sm);cursor:pointer;min-height:36px;background:none;border:none;transition:background .15s;min-width:unset}
+.cal-grid .cal-day:active{background:var(--gold-soft)}
+.cal-grid .cal-day.today{background:var(--gold-soft);border:1px solid var(--gold-mid,var(--gold-border))}
+.cal-grid .cal-day.selected{background:var(--gold-soft);border:1px solid var(--gold)}
+.cal-grid .cal-day.other-month .cal-num{color:var(--text-ghost,var(--text-faint));opacity:.4}
+.cal-grid .cal-num{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600}
+.cal-dots{display:flex;gap:2px;justify-content:center;margin-top:2px}
+.cal-dot{width:5px;height:5px;border-radius:50%}
+.cal-day-events{background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-lg);padding:14px;margin-bottom:12px}
+.cal-event-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gold-border)}
+.cal-event-item:last-child{border-bottom:none}
+.cal-event-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cal-event-text{flex:1;font-size:13px}
+.cal-event-time{font-size:11px;color:var(--text-faint);font-family:'DM Mono',monospace}
+
 /* ── MONTHLY SUMMARY ── */
 .month-card{background:linear-gradient(135deg,var(--card),rgba(76,175,80,0.04));border:1px solid rgba(76,175,80,0.15);border-radius:var(--r-lg);padding:18px;margin-bottom:12px}
 .month-title{font-size:10px;color:var(--text-faint);letter-spacing:2px;text-transform:uppercase;font-family:'DM Mono',monospace;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
@@ -731,6 +754,20 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       </div>
     </div>
     <div class="card"><div class="card-title">Recent Activity</div><div id="home-activity"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No activity yet</div></div></div></div>
+
+    <!-- FULL CALENDAR — rendered by renderCalendar() -->
+    <div class="cal-full-wrap">
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="calNav(-1)">&#8249;</button>
+        <div id="cal-month-label" class="cal-month-label">—</div>
+        <button class="cal-nav-btn" onclick="calNav(1)">&#8250;</button>
+      </div>
+      <div id="cal-grid" class="cal-grid"></div>
+    </div>
+    <div id="cal-day-events" class="cal-day-events" style="display:none">
+      <div id="cal-day-label" style="font-size:13px;font-weight:600;color:var(--gold);margin-bottom:10px">—</div>
+      <div id="cal-day-list"></div>
+    </div>
   </div>
 
   <!-- FINANCE -->
@@ -980,7 +1017,7 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <div class="sec-hdr"><div class="sec-title">Health & Care</div></div>
       <div id="health-profiles-list"></div>
       <div class="empty-action" style="padding:20px;text-align:center">
-        <button class="btn-primary" onclick="openModal('modal-add-patient')">+ Add Patient</button>
+        <button class="btn-primary" onclick="openModal('modal-add-patient')">+ Add Health Profile</button>
       </div>
     </div>
 
@@ -995,13 +1032,15 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <div class="chip-row" id="health-tabs">
         <button class="chip on" onclick="switchHealthTab('overview',this)">Overview</button>
         <button class="chip" onclick="switchHealthTab('reports',this)">Reports</button>
+        <button class="chip" onclick="switchHealthTab('vitals',this)">Vitals</button>
         <button class="chip" onclick="switchHealthTab('meds',this)">Meds</button>
         <button class="chip" onclick="switchHealthTab('visits',this)">Visits</button>
         <button class="chip" onclick="switchHealthTab('bills',this)">Bills</button>
       </div>
-      
+
       <div id="health-tab-overview" class="health-tab-pane"></div>
       <div id="health-tab-reports" class="health-tab-pane" style="display:none"></div>
+      <div id="health-tab-vitals" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-meds" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-visits" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-bills" class="health-tab-pane" style="display:none"></div>
@@ -1365,11 +1404,29 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 <div class="modal-overlay" id="modal-add-patient">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-title">Add Patient <button class="modal-close" onclick="closeModal('modal-add-patient')">✕</button></div>
-    <div class="form-group"><label class="form-label">Name (e.g. Papa, Mummy)</label><input class="form-input" id="hp-name" placeholder="Name"></div>
+    <div class="modal-title">Add Health Profile <button class="modal-close" onclick="closeModal('modal-add-patient')">✕</button></div>
+    <div class="form-group"><label class="form-label">Name (e.g. Papa, Mummy, Self)</label><input class="form-input" id="hp-name" placeholder="Name"></div>
     <div class="form-group"><label class="form-label">Relation</label>
-      <select class="form-select" id="hp-relation"><option>Father</option><option>Mother</option><option>Spouse</option><option>Child</option><option>Other</option></select></div>
-    <div class="form-group"><label class="form-label">Diagnosis</label><input class="form-input" id="hp-diagnosis" placeholder="e.g. Stage 4 Lung Cancer"></div>
+      <select class="form-select" id="hp-relation"><option>Father</option><option>Mother</option><option>Spouse</option><option>Child</option><option>Self</option><option>Other</option></select></div>
+    <div class="form-group"><label class="form-label">Condition Type</label>
+      <select class="form-select" id="hp-conditionType">
+        <option value="Cancer">Cancer</option>
+        <option value="Diabetes">Diabetes</option>
+        <option value="Hypertension">Hypertension</option>
+        <option value="Thyroid Disorder">Thyroid Disorder</option>
+        <option value="Heart Disease">Heart Disease</option>
+        <option value="Kidney Disease">Kidney Disease</option>
+        <option value="Obesity / Fatty Liver">Obesity / Fatty Liver</option>
+        <option value="PCOS/PCOD">PCOS/PCOD</option>
+        <option value="Asthma / COPD">Asthma / COPD</option>
+        <option value="Arthritis">Arthritis</option>
+        <option value="Fitness &amp; Wellness">Fitness &amp; Wellness</option>
+        <option value="Post-Surgery Recovery">Post-Surgery Recovery</option>
+        <option value="Mental Health">Mental Health</option>
+        <option value="Pregnancy">Pregnancy</option>
+        <option value="Other / General">Other / General</option>
+      </select></div>
+    <div class="form-group"><label class="form-label">Diagnosis / Details</label><input class="form-input" id="hp-diagnosis" placeholder="e.g. Liver Cancer Stage 3, Type 2 Diabetes, Hypertension"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group"><label class="form-label">Diagnosed On</label><input class="form-input" id="hp-diagnosedOn" type="date"></div>
       <div class="form-group"><label class="form-label">Blood Group</label><input class="form-input" id="hp-bloodGroup" placeholder="e.g. O+"></div>
@@ -1455,7 +1512,22 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
          <div class="form-group"><label class="form-label">Category</label>
            <select class="form-select" id="hb-cat"><option>consultation</option><option>medicine</option><option>test</option><option>procedure</option></select></div>
        </div>
+       <div class="form-group"><label class="form-label">Insurance Claim</label>
+         <select class="form-select" id="hb-claim"><option value="none">No Claim</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="received">Received</option><option value="rejected">Rejected</option></select></div>
        <button class="btn-primary" onclick="saveHealthBill()">Confirm & Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- DOCTOR SUMMARY -->
+<div class="modal-overlay" id="modal-doctor-summary">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 Doctor Summary <button class="modal-close" onclick="closeModal('modal-doctor-summary')">✕</button></div>
+    <div id="doctor-summary-content" style="flex:1;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--text-dim);white-space:pre-wrap;margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px">
+      <button class="btn-primary" style="flex:1" onclick="copyDoctorSummary()">📋 Copy</button>
+      <button class="btn-sm fill" style="flex:1" onclick="shareDoctorSummary()">↗ Share</button>
     </div>
   </div>
 </div>
@@ -1522,6 +1594,8 @@ import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
   getDocs, writeBatch, where }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
 const fbCfg = {
   apiKey:"AIzaSyD7JzF-dwzdN9j7dwuIakuQMmU01bkwCUI",
@@ -1531,12 +1605,13 @@ const fbCfg = {
   messagingSenderId:"186667096834",
   appId:"1:186667096834:web:4b7c11d51478ab0653c01b"
 };
-let fbApp, auth, db, functions;
+let fbApp, auth, db, functions, storage;
 try {
   fbApp = initializeApp(fbCfg);
   auth = getAuth(fbApp);
   db = getFirestore(fbApp);
   functions = getFunctions(fbApp, 'us-central1');
+  storage = getStorage(fbApp);
 } catch (e) {
   console.error('Firebase init failed:', e);
   document.addEventListener('DOMContentLoaded', () => {
@@ -1645,6 +1720,13 @@ const LS = {
   set:(k,v)=>{ try{ localStorage.setItem(k,v); }catch{} },
   del:(k)=>{ try{ localStorage.removeItem(k); }catch{} }
 };
+
+// ══ FIREBASE STORAGE HELPER ══
+async function uploadMediaToStorage(dataUrl, path) {
+  const sRef = storageRef(storage, path);
+  await uploadString(sRef, dataUrl, 'data_url');
+  return await getDownloadURL(sRef);
+}
 
 // ══ SCREENS ══
 window.showScreen=id=>{
@@ -1849,9 +1931,25 @@ window.pinDelete=()=>{
   updatePinDots('pin-dots',pinEntry.length,false);
 };
 
-function verifyPin(){
+async function hashPin(pin){
+  const enc=new TextEncoder().encode(pin);
+  const buf=await crypto.subtle.digest('SHA-256',enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function verifyPin(){
   const stored=LS.get('familyos_pin');
-  if(pinEntry===stored){
+  if(!stored){ grantAccess(); return; }
+  let match=false;
+  if(stored.length===4){
+    // Legacy plain-text PIN — compare directly then silently migrate to hash
+    match=(pinEntry===stored);
+    if(match){ hashPin(stored).then(h=>LS.set('familyos_pin',h)); }
+  } else {
+    const hashed=await hashPin(pinEntry);
+    match=(hashed===stored);
+  }
+  if(match){
     grantAccess();
   } else {
     updatePinDots('pin-dots',4,true);
@@ -1898,7 +1996,7 @@ window.setupPinPress=d=>{
     if(setupPinConfirm.length===4){
       setTimeout(()=>{
         if(setupPin===setupPinConfirm){
-          LS.set('familyos_pin',setupPin);
+          hashPin(setupPin).then(h=>LS.set('familyos_pin',h));
           document.getElementById('btn-finish-setup').style.display='block';
           document.getElementById('pin-create-section').style.display='none';
           showToast('PIN set successfully');
@@ -1975,7 +2073,7 @@ window.chsecPinPress=d=>{
     if(chsecPinConfirm.length===4){
       setTimeout(()=>{
         if(chsecPin===chsecPinConfirm){
-          LS.set('familyos_pin',chsecPin);
+          hashPin(chsecPin).then(h=>LS.set('familyos_pin',h));
           LS.set('familyos_security','pin');
           securityMode='pin';
           document.getElementById('security-mode-sub').textContent='4-Digit PIN';
@@ -2784,7 +2882,7 @@ window.openEditExpense=id=>{
   clearEditMode();
   if(id){
     const e=data.expenses.find(x=>x.id===id);
-    if(!e) return;
+    if(!e){ showToast('Expense not found'); return; }
     editMode={type:'expense',id};
     document.getElementById('exp-modal-title').childNodes[0].textContent='Edit Expense ';
     document.getElementById('exp-desc').value=e.desc||'';
@@ -2932,7 +3030,18 @@ window.saveExpense=async()=>{
   const btn=document.getElementById('btn-save-expense');
   btn.disabled=true; btn.textContent='Saving...'; setSyncing(true);
   const existingPhoto=editMode?.type==='expense'?data.expenses.find(x=>x.id===editMode.id)?.photo:null;
-  const photo=editMode?.type==='expense'?(pendingPhotos[0]||existingPhoto||null):(pendingPhotos[0]||null);
+  let photo=editMode?.type==='expense'?(pendingPhotos[0]||existingPhoto||null):(pendingPhotos[0]||null);
+  // Upload new receipt photo to Firebase Storage (avoid storing base64 in Firestore)
+  if(photo&&photo.startsWith('data:')){
+    try{
+      const path=`families/${FID}/expenses/${Date.now()}.jpg`;
+      photo=await uploadMediaToStorage(photo,path);
+    }catch(uploadErr){
+      console.error('Receipt photo upload failed:',uploadErr);
+      showToast('Photo upload failed — saving without photo');
+      photo=null;
+    }
+  }
   const splitOn=document.getElementById('exp-split-toggle').checked;
   const splitSelf=parseFloat(document.getElementById('exp-split-self').value)||0;
   const splitPartner=parseFloat(document.getElementById('exp-split-partner').value)||0;
@@ -3449,6 +3558,7 @@ window.renderInterior=renderInterior;
 async function saveHealthProfile() {
   const name = document.getElementById('hp-name').value.trim();
   const relation = document.getElementById('hp-relation').value;
+  const conditionType = document.getElementById('hp-conditionType').value;
   const diagnosis = document.getElementById('hp-diagnosis').value.trim();
   const diagnosedOn = document.getElementById('hp-diagnosedOn').value;
   const bloodGroup = document.getElementById('hp-bloodGroup').value.trim();
@@ -3459,7 +3569,7 @@ async function saveHealthProfile() {
 
   try {
     const payload = {
-      name, relation, diagnosis, diagnosedOn, bloodGroup,
+      name, relation, conditionType, diagnosis, diagnosedOn, bloodGroup,
       treatingHospital: hospital, treatingDoctor: doctor,
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
     };
@@ -3477,9 +3587,13 @@ function renderHealthProfiles() {
     listEl.innerHTML = `<div class="empty"><div class="empty-icon">🏥</div><div class="empty-text">No health profiles yet</div></div>`;
     return;
   }
+  const conditionColors = {'Cancer':'var(--red)','Diabetes':'var(--blue)','Hypertension':'#e05c5c','Thyroid Disorder':'#9b59b6','Heart Disease':'#e74c3c','Kidney Disease':'#16a085','Obesity / Fatty Liver':'#e67e22','PCOS/PCOD':'#8e44ad','Asthma / COPD':'#2980b9','Arthritis':'#7f8c8d','Fitness & Wellness':'var(--green)','Post-Surgery Recovery':'#d35400','Mental Health':'#6c5ce7','Pregnancy':'#fd79a8','Other / General':'var(--gold)'};
   listEl.innerHTML = data.healthProfiles.map(p => `
     <div class="health-card" onclick="openPatientDashboard('${p.id}')">
-      <div class="health-card-title">${p.name}</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div class="health-card-title">${p.name}</div>
+        ${p.conditionType ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:${conditionColors[p.conditionType]||'var(--gold)'};color:#fff;white-space:nowrap">${p.conditionType}</span>` : ''}
+      </div>
       <div class="health-card-sub">${p.relation} · ${p.diagnosis}</div>
       <div style="font-size:10px;color:var(--text-faint)">Last updated: ${p.updatedAt ? fmtDate(p.updatedAt.toDate()) : '—'}</div>
     </div>
@@ -3494,7 +3608,25 @@ function showHealthProfiles() {
 }
 
 let activePatientUnsubs = [];
-let activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [] };
+let activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [] };
+
+const VITALS_TEMPLATES = {
+  'Cancer':          [{key:'hb',label:'Hemoglobin',unit:'g/dL',low:12,high:17},{key:'wbc',label:'WBC',unit:'K/µL',low:4,high:11},{key:'platelets',label:'Platelets',unit:'K/µL',low:150,high:400},{key:'tumorMarker',label:'Tumor Marker',unit:'U/mL',low:0,high:35}],
+  'Diabetes':        [{key:'fastingGlucose',label:'Fasting Glucose',unit:'mg/dL',low:70,high:100},{key:'ppGlucose',label:'PP Glucose',unit:'mg/dL',low:70,high:140},{key:'hba1c',label:'HbA1c',unit:'%',low:4,high:5.7},{key:'weight',label:'Weight',unit:'kg',low:0,high:999}],
+  'Hypertension':    [{key:'systolic',label:'Systolic BP',unit:'mmHg',low:90,high:120},{key:'diastolic',label:'Diastolic BP',unit:'mmHg',low:60,high:80},{key:'pulse',label:'Pulse',unit:'bpm',low:60,high:100}],
+  'Thyroid Disorder':[{key:'tsh',label:'TSH',unit:'mIU/L',low:0.4,high:4},{key:'t3',label:'T3',unit:'ng/dL',low:80,high:200},{key:'t4',label:'T4',unit:'µg/dL',low:5,high:12}],
+  'Heart Disease':   [{key:'systolic',label:'Systolic BP',unit:'mmHg',low:90,high:120},{key:'cholesterol',label:'Total Cholesterol',unit:'mg/dL',low:0,high:200},{key:'ef',label:'EF%',unit:'%',low:55,high:70},{key:'pulse',label:'Heart Rate',unit:'bpm',low:60,high:100}],
+  'Kidney Disease':  [{key:'creatinine',label:'Creatinine',unit:'mg/dL',low:0.6,high:1.2},{key:'egfr',label:'eGFR',unit:'mL/min',low:60,high:120},{key:'urea',label:'Blood Urea',unit:'mg/dL',low:7,high:20}],
+  'Obesity / Fatty Liver':[{key:'weight',label:'Weight',unit:'kg',low:0,high:999},{key:'bmi',label:'BMI',unit:'kg/m²',low:18.5,high:24.9},{key:'waist',label:'Waist',unit:'cm',low:0,high:80},{key:'alt',label:'ALT (SGPT)',unit:'U/L',low:7,high:40}],
+  'PCOS/PCOD':       [{key:'weight',label:'Weight',unit:'kg',low:0,high:999},{key:'lh',label:'LH',unit:'mIU/mL',low:2,high:15},{key:'fsh',label:'FSH',unit:'mIU/mL',low:3,high:10},{key:'testosterone',label:'Testosterone',unit:'ng/dL',low:15,high:70}],
+  'Asthma / COPD':   [{key:'peakFlow',label:'Peak Flow',unit:'L/min',low:400,high:650},{key:'spo2',label:'SpO2',unit:'%',low:95,high:100}],
+  'Arthritis':       [{key:'painScale',label:'Pain Scale',unit:'/10',low:0,high:3},{key:'crp',label:'CRP',unit:'mg/L',low:0,high:5},{key:'esr',label:'ESR',unit:'mm/hr',low:0,high:20}],
+  'Fitness & Wellness':[{key:'weight',label:'Weight',unit:'kg',low:0,high:999},{key:'bmi',label:'BMI',unit:'kg/m²',low:18.5,high:24.9},{key:'vo2',label:'VO2 Max',unit:'mL/kg/min',low:35,high:60},{key:'steps',label:'Daily Steps',unit:'steps',low:7000,high:10000}],
+  'Pregnancy':       [{key:'weight',label:'Weight',unit:'kg',low:0,high:999},{key:'systolic',label:'Systolic BP',unit:'mmHg',low:90,high:120},{key:'fetalHR',label:'Fetal Heart Rate',unit:'bpm',low:110,high:160},{key:'week',label:'Week',unit:'wks',low:0,high:42}],
+  'Mental Health':   [{key:'moodScore',label:'Mood Score',unit:'/10',low:6,high:10},{key:'sleepHours',label:'Sleep',unit:'hrs',low:7,high:9},{key:'anxietyScore',label:'Anxiety Score',unit:'/10',low:0,high:3}],
+  'Post-Surgery Recovery':[{key:'painScale',label:'Pain Scale',unit:'/10',low:0,high:3},{key:'temp',label:'Temperature',unit:'°F',low:97,high:99},{key:'weight',label:'Weight',unit:'kg',low:0,high:999}],
+  'Other / General': [{key:'weight',label:'Weight',unit:'kg',low:0,high:999},{key:'temp',label:'Temperature',unit:'°F',low:97,high:99},{key:'systolic',label:'Systolic BP',unit:'mmHg',low:90,high:120},{key:'pulse',label:'Pulse',unit:'bpm',low:60,high:100}],
+};
 
 async function openPatientDashboard(id) {
   activeHealthProfileId = id;
@@ -3520,8 +3652,18 @@ function subscribeActivePatient() {
   const u3 = onSnapshot(query(collection(db, `${base}/visits`), orderBy('date', 'desc')), s => { activePatientData.visits = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
   const u4 = onSnapshot(query(collection(db, `${base}/bills`), orderBy('date', 'desc')), s => { activePatientData.bills = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
   const u5 = onSnapshot(query(collection(db, `${base}/timeline`), orderBy('date', 'desc')), s => { activePatientData.timeline = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
-  
-  activePatientUnsubs = [u1, u2, u3, u4, u5];
+  const u6 = onSnapshot(query(collection(db, `${base}/vitals`), orderBy('recordedAt', 'desc')), s => { activePatientData.vitals = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
+  const u7 = onSnapshot(query(collection(db, `${base}/symptoms`), orderBy('recordedAt', 'desc')), s => { activePatientData.symptoms = s.docs.map(d => ({id: d.id, ...d.data()})); renderHealthTab(); });
+  // Adherence: last 7 days
+  const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+  const u8 = onSnapshot(query(collection(db, `${base}/adherence`), where('__name__', '>=', sevenDaysAgoStr)), s => {
+    activePatientData.adherence = {};
+    s.docs.forEach(d => { activePatientData.adherence[d.id] = d.data(); });
+    renderHealthTab();
+  });
+
+  activePatientUnsubs = [u1, u2, u3, u4, u5, u6, u7, u8];
 }
 
 function switchHealthTab(tab, btn) {
@@ -3538,9 +3680,133 @@ function renderHealthTab() {
   if(!activeHealthProfileId) return;
   if(activeHealthTab === 'overview') renderHealthOverview();
   else if(activeHealthTab === 'reports') renderHealthReports();
+  else if(activeHealthTab === 'vitals') renderHealthVitals();
   else if(activeHealthTab === 'meds') renderHealthMeds();
   else if(activeHealthTab === 'visits') renderHealthVisits();
   else if(activeHealthTab === 'bills') renderHealthBills();
+}
+
+function vitalFlag(val, low, high) {
+  if(val < low || val > high) return val < low * 0.85 || val > high * 1.15 ? 'critical' : 'warn';
+  return 'normal';
+}
+
+function vitalColor(flag) {
+  return flag === 'normal' ? 'var(--green)' : flag === 'warn' ? '#e67e22' : 'var(--red)';
+}
+
+function buildSparkline(readings, low, high) {
+  if(readings.length < 2) return '';
+  const vals = readings.map(r => r.value);
+  const minV = Math.min(...vals, low * 0.9);
+  const maxV = Math.max(...vals, high * 1.1);
+  const range = maxV - minV || 1;
+  const w = 120, h = 32, pad = 4;
+  const pts = readings.map((r, i) => {
+    const x = pad + (i / (readings.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((r.value - minV) / range) * (h - pad * 2);
+    return `${x},${y}`;
+  }).join(' ');
+  const dots = readings.map((r, i) => {
+    const x = pad + (i / (readings.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((r.value - minV) / range) * (h - pad * 2);
+    const flag = vitalFlag(r.value, low, high);
+    return `<circle cx="${x}" cy="${y}" r="3" fill="${vitalColor(flag)}"/>`;
+  }).join('');
+  return `<svg width="${w}" height="${h}" style="overflow:visible"><polyline points="${pts}" fill="none" stroke="var(--gold-border)" stroke-width="1.5"/>${dots}</svg>`;
+}
+
+function renderHealthVitals() {
+  const el = document.getElementById('health-tab-vitals');
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if(!p) return;
+  const condType = p.conditionType || 'Other / General';
+  const templates = VITALS_TEMPLATES[condType] || VITALS_TEMPLATES['Other / General'];
+
+  // Group vitals by key
+  const byKey = {};
+  (activePatientData.vitals || []).forEach(v => {
+    templates.forEach(t => {
+      if(v[t.key] !== undefined && v[t.key] !== '') {
+        if(!byKey[t.key]) byKey[t.key] = [];
+        byKey[t.key].push({ value: parseFloat(v[t.key]), date: v.recordedAt?.toDate?.() || new Date(), id: v.id });
+      }
+    });
+  });
+
+  const trendCards = templates.map(t => {
+    const readings = (byKey[t.key] || []).slice(0, 10).reverse();
+    const latest = readings[readings.length - 1];
+    const flag = latest ? vitalFlag(latest.value, t.low, t.high) : null;
+    return `<div class="health-card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:12px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.5px">${t.label}</div>
+          ${latest ? `<div style="font-size:22px;font-family:'DM Mono',monospace;color:${vitalColor(flag)};font-weight:700">${latest.value} <span style="font-size:12px;color:var(--text-faint)">${t.unit}</span></div>` : `<div style="font-size:13px;color:var(--text-faint)">No data yet</div>`}
+        </div>
+        ${readings.length >= 2 ? buildSparkline(readings, t.low, t.high) : ''}
+      </div>
+      ${latest ? `<div style="font-size:10px;color:var(--text-faint);margin-top:4px">Last: ${latest.date.toLocaleDateString('en-IN', {day:'numeric',month:'short'})} · Normal range: ${t.low}–${t.high} ${t.unit}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  const formFields = templates.map(t => `
+    <div class="form-group">
+      <label class="form-label">${t.label} <span style="color:var(--text-faint)">(${t.unit})</span></label>
+      <input class="form-input" id="vital-${t.key}" type="number" step="any" placeholder="${t.low}–${t.high}">
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="sec-title" style="font-size:18px">Vitals · ${condType}</div>
+      <button class="btn-sm fill" onclick="document.getElementById('vitals-log-form').style.display=document.getElementById('vitals-log-form').style.display==='none'?'block':'none'">+ Log</button>
+    </div>
+    <div id="vitals-log-form" style="display:none;background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:16px;margin-bottom:20px">
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="vital-date" type="date" value="${todayStr()}"></div>
+      ${formFields}
+      <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="vital-note" placeholder="Any notes..."></div>
+      <button class="btn-primary" onclick="saveVital()">Save Vitals</button>
+    </div>
+    ${trendCards || '<div class="empty"><div class="empty-icon">📊</div><div class="empty-text">No vitals logged yet</div></div>'}
+    ${(activePatientData.vitals || []).length > 0 ? `
+    <div style="margin-top:16px">
+      <div class="health-card-title" style="font-size:12px;text-transform:uppercase;color:var(--text-faint);margin-bottom:10px">History</div>
+      ${(activePatientData.vitals || []).slice(0, 15).map(v => {
+        const dateStr = v.recordedAt?.toDate?.()?.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) || '—';
+        const vals = templates.filter(t => v[t.key] !== undefined && v[t.key] !== '').map(t => `${t.label}: <strong>${v[t.key]} ${t.unit}</strong>`).join(' · ');
+        return `<div class="list-item" style="flex-direction:column;align-items:flex-start;gap:4px">
+          <div style="font-size:11px;color:var(--gold)">${dateStr}</div>
+          <div style="font-size:12px;color:var(--text-dim)">${vals || '—'}</div>
+          ${v.note ? `<div style="font-size:11px;color:var(--text-faint)">${v.note}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+  `;
+}
+
+async function saveVital() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if(!p) return;
+  const condType = p.conditionType || 'Other / General';
+  const templates = VITALS_TEMPLATES[condType] || VITALS_TEMPLATES['Other / General'];
+  const date = document.getElementById('vital-date').value;
+  const note = document.getElementById('vital-note')?.value?.trim() || '';
+
+  const payload = { date, note, recordedAt: serverTimestamp() };
+  let hasValue = false;
+  templates.forEach(t => {
+    const el = document.getElementById(`vital-${t.key}`);
+    if(el && el.value !== '') { payload[t.key] = parseFloat(el.value); hasValue = true; }
+  });
+
+  if(!hasValue) { showToast('Enter at least one value'); return; }
+
+  try {
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/vitals`), payload);
+    showToast('Vitals saved ✓');
+    document.getElementById('vitals-log-form').style.display = 'none';
+    templates.forEach(t => { const el = document.getElementById(`vital-${t.key}`); if(el) el.value = ''; });
+  } catch(e) { console.error(e); showToast('Error saving vitals'); }
 }
 
 async function renderHealthOverview() {
@@ -3605,6 +3871,31 @@ async function renderHealthOverview() {
       </div>
     </div>
 
+    <div class="health-card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="health-card-title">🩺 Symptom Diary</div>
+        <button class="btn-sm fill" onclick="document.getElementById('symptom-quick-form').style.display=document.getElementById('symptom-quick-form').style.display==='none'?'block':'none'">+ Log</button>
+      </div>
+      <div id="symptom-quick-form" style="display:none;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--gold-border)">
+        <input class="form-input" id="symptom-text" placeholder="e.g. Nausea, fatigue, mild fever..." style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:12px;color:var(--text-dim)">Severity:</span>
+          ${[1,2,3,4,5].map(n => `<button class="btn-sm" id="sev-btn-${n}" onclick="selectSeverity(${n})" style="width:28px;height:28px;padding:0;border-radius:50%">${n}</button>`).join('')}
+        </div>
+        <button class="btn-primary" style="width:100%" onclick="saveSymptom()">Save</button>
+      </div>
+      ${(activePatientData.symptoms || []).length === 0
+        ? `<div style="font-size:12px;color:var(--text-faint)">No symptoms logged yet</div>`
+        : (activePatientData.symptoms || []).slice(0,5).map(s => {
+            const sevColor = s.severity <= 2 ? 'var(--green)' : s.severity <= 3 ? '#e67e22' : 'var(--red)';
+            const dateStr = s.recordedAt?.toDate?.()?.toLocaleDateString('en-IN',{day:'numeric',month:'short'}) || '—';
+            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="width:20px;height:20px;border-radius:50%;background:${sevColor};display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">${s.severity}</span>
+              <div style="flex:1"><div style="font-size:13px">${s.symptom}</div><div style="font-size:10px;color:var(--text-faint)">${dateStr}</div></div>
+            </div>`;
+          }).join('')}
+    </div>
+
     <button class="btn-primary" onclick="generateDoctorSummary()" style="margin-bottom:20px">📋 Prepare Doctor Summary</button>
   `;
 }
@@ -3645,6 +3936,7 @@ async function renderHealthReports() {
             <span class="health-urgency-badge urgency-${r.urgency || 'routine'}">${r.urgency || 'routine'}</span>
           </div>
           <div style="font-size:13px;line-height:1.5;color:var(--text-dim)">${r.aiSummary}</div>
+          ${(r.imageUrl || r.imageBase64) ? `<img src="${r.imageUrl || r.imageBase64}" style="width:100%;border-radius:8px;margin-top:10px;object-fit:cover;max-height:200px" loading="lazy">` : ''}
           <div class="report-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--gold-border)">
             <div style="font-size:11px;font-weight:600;margin-bottom:8px;text-transform:uppercase">Key Findings</div>
             ${(r.keyFindings || []).map(f => `
@@ -3669,27 +3961,47 @@ function renderHealthMeds() {
   const el = document.getElementById('health-tab-meds');
   const active = activePatientData.medications.filter(m => m.active !== false);
   const inactive = activePatientData.medications.filter(m => m.active === false);
+  const today = todayStr();
+  const todayAdherence = activePatientData.adherence?.[today] || {};
+
+  // Build last 7 days array
+  const last7 = Array.from({length:7}, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    return d.toISOString().split('T')[0];
+  });
 
   el.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div class="sec-title" style="font-size:18px">Medications</div>
       <button class="btn-sm fill" onclick="openModal('modal-health-med')">+ Add Med</button>
     </div>
-    
+
     <div class="health-card-title" style="font-size:12px;color:var(--text-faint);text-transform:uppercase;margin-bottom:10px">Active</div>
-    ${active.map(m => `
+    ${active.map(m => {
+      const takenToday = !!todayAdherence[m.id];
+      const streakDots = last7.map(d => {
+        const taken = activePatientData.adherence?.[d]?.[m.id];
+        return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${taken ? 'var(--green)' : d === today ? 'var(--gold-border)' : 'var(--surface)'};border:1px solid ${taken ? 'var(--green)' : 'var(--gold-border)'}" title="${d}"></span>`;
+      }).join('');
+      return `
       <div class="health-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div>
+          <div style="flex:1">
             <div class="health-card-title" style="color:var(--gold)">${m.name}</div>
             <div style="font-size:14px;font-weight:600">${m.dose} · ${m.frequency}</div>
             <div style="font-size:12px;color:var(--text-dim);margin-top:4px">${m.timing}</div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:10px">
+              ${streakDots}
+            </div>
           </div>
-          <button class="btn-sm" onclick="toggleMedActive('${m.id}', false)">Stop</button>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+            <button class="btn-sm" onclick="toggleMedActive('${m.id}', false)">Stop</button>
+            <button class="btn-sm${takenToday ? ' fill' : ''}" onclick="toggleMedAdherence('${m.id}', ${!takenToday})" style="${takenToday ? 'background:var(--green);border-color:var(--green)' : ''}">${takenToday ? '✓ Taken' : 'Mark Taken'}</button>
+          </div>
         </div>
         ${m.notes ? `<div style="font-size:11px;color:var(--text-faint);margin-top:8px;padding-top:8px;border-top:1px solid var(--gold-border)">${m.notes}</div>` : ''}
-      </div>
-    `).join('')}
+      </div>`;
+    }).join('')}
 
     ${inactive.length ? `
       <div class="health-card-title" style="font-size:12px;color:var(--text-faint);text-transform:uppercase;margin:20px 0 10px">Inactive</div>
@@ -3744,32 +4056,58 @@ function renderHealthVisits() {
   `;
 }
 
+let healthBillsFilter = 'all';
 function renderHealthBills() {
   const el = document.getElementById('health-tab-bills');
   const total = activePatientData.bills.reduce((s, b) => s + (b.amount || 0), 0);
-  
+  const claimColors = { none:'var(--text-faint)', submitted:'var(--blue)', approved:'var(--green)', received:'#C9A84C', rejected:'var(--red)' };
+  const claimLabels = { none:'No Claim', submitted:'Submitted', approved:'Approved', received:'Received', rejected:'Rejected' };
+
+  const filtered = healthBillsFilter === 'all' ? activePatientData.bills
+    : healthBillsFilter === 'pending' ? activePatientData.bills.filter(b => !b.claimStatus || b.claimStatus === 'none')
+    : activePatientData.bills.filter(b => b.claimStatus === healthBillsFilter);
+
   el.innerHTML = `
     <div style="background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:16px;margin-bottom:20px;text-align:center">
       <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px">Total Treatment Cost</div>
       <div style="font-family:'DM Mono',monospace;font-size:28px;color:var(--gold);margin-top:4px">${fmt(total)}</div>
     </div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="sec-title" style="font-size:18px">Health Bills</div>
       <button class="btn-sm fill" onclick="openModal('modal-health-bill')">+ Add Bill</button>
     </div>
 
-    ${activePatientData.bills.map(b => `
-      <div class="list-item">
-        <div class="list-icon">${b.category === 'medicine' ? '💊' : b.category === 'test' ? '🧪' : '🏥'}</div>
-        <div class="list-info">
-          <div class="list-name">${b.hospital || 'Medical bill'}</div>
-          <div class="list-sub">${fmtDate(b.date)} · ${b.category}</div>
+    <div class="chip-row" style="margin-bottom:16px">
+      ${['all','pending','submitted','approved','received','rejected'].map(f =>
+        `<button class="chip${healthBillsFilter===f?' on':''}" onclick="healthBillsFilter='${f}';renderHealthBills()">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`
+      ).join('')}
+    </div>
+
+    ${filtered.length === 0 ? '<div class="empty"><div class="empty-text">No bills in this category</div></div>' :
+      filtered.map(b => `
+        <div class="list-item" style="align-items:flex-start">
+          <div class="list-icon">${b.category === 'medicine' ? '💊' : b.category === 'test' ? '🧪' : '🏥'}</div>
+          <div class="list-info" style="flex:1">
+            <div class="list-name">${b.hospital || 'Medical bill'}</div>
+            <div class="list-sub">${fmtDate(b.date)} · ${b.category}</div>
+            <div style="margin-top:6px">
+              <select style="font-size:10px;padding:2px 6px;border-radius:12px;border:1px solid ${claimColors[b.claimStatus||'none']};color:${claimColors[b.claimStatus||'none']};background:var(--surface);cursor:pointer" onchange="updateBillClaim('${b.id}',this.value)">
+                ${Object.entries(claimLabels).map(([v,l]) => `<option value="${v}"${(b.claimStatus||'none')===v?' selected':''}>${l}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="list-amount">${fmt(b.amount)}</div>
         </div>
-        <div class="list-amount">${fmt(b.amount)}</div>
-      </div>
-    `).join('')}
+      `).join('')}
   `;
+}
+
+async function updateBillClaim(billId, claimStatus) {
+  try {
+    await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/bills`, billId), { claimStatus });
+    showToast('Claim status updated ✓');
+  } catch(e) { console.error(e); showToast('Error updating claim'); }
 }
 
 // ══ AI FUNCTIONS ══
@@ -3837,40 +4175,10 @@ async function askHealthAI(profileId, question) {
 }
 
 async function callClaudeHealth(prompt, context, isCompassionatePersona = false, model = LLM_MODELS.medicalQA) {
-  const apiKey = window.FAMILYOS_OCR_CONFIG?.anthropicKey;
-  if(!apiKey) {
-    showToast('Anthropic API key is missing in config.js');
-    throw new Error('Claude API key missing');
-  }
-
-  const systemPrompt = isCompassionatePersona 
-    ? `You are a compassionate medical information assistant helping an Indian family caregiver understand their family member's medical condition. Answer questions clearly and compassionately in simple language. ALWAYS recommend consulting the treating doctor for any treatment decisions. Be honest about uncertainty. Use simple language, avoid jargon. Answer in the same language the question is asked (Hindi or English).`
-    : `You are a medical data summarizer. Be concise, clear, and compassionate.`;
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: model,
-      max_tokens: 1000,
-      system: systemPrompt + `\n\nContext:\n${context}`,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json();
-    console.error('Claude API error:', err);
-    throw new Error(`API error ${response.status}: ${err.error?.message || 'Unknown'}`);
-  }
-
-  const resData = await response.json();
-  return resData.content[0].text;
+  if (!FID || !functions) throw new Error('Not initialized');
+  const fn = httpsCallable(functions, 'healthAskAI');
+  const res = await fn({ fid: FID, prompt, context, isCompassionatePersona, model });
+  return res.data.text;
 }
 
 // ══ VOICE & UTILS ══
@@ -3973,8 +4281,9 @@ Respond with JSON only. No markdown. No explanation.`;
       reportData.aiSummary = reportData.summary;
     }
     
-    reportData.imageBase64 = 'data:image/jpeg;base64,' + base64NoPrefix;
-    
+    // Store dataUrl separately — uploaded to Firebase Storage on confirm, never written to Firestore
+    window._pendingReportDataUrl = 'data:image/jpeg;base64,' + base64NoPrefix;
+
     document.getElementById('health-report-analysis').innerHTML = `
       <div class="health-card-title">${reportData.title}</div>
       <div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">${reportData.aiSummary}</div>
@@ -3983,13 +4292,12 @@ Respond with JSON only. No markdown. No explanation.`;
     document.getElementById('health-report-preview').style.display = 'block';
     document.getElementById('health-report-upload').style.display = 'none';
     window._pendingReport = reportData;
-  } catch(e) { 
+  } catch(e) {
     console.error('handleHealthReport exception:', e);
-    const status = e.message.match(/API error (\d+)/)?.[1];
-    if (status === '400') showToast('Image too large or wrong format — try again');
-    else if (status === '401') showToast('API key error — check settings');
-    else if (status === '529') showToast('AI service busy — try in 30 seconds');
-    else showToast('Connection error — check internet and try again');
+    if (e.code === 'resource-exhausted' || e.message?.includes('Rate limited')) showToast('Too many requests — please wait 30 seconds');
+    else if (e.code === 'unauthenticated') showToast('Session expired — please reload');
+    else if (e.message?.includes('too large') || e.message?.includes('400')) showToast('Image too large — try a smaller photo');
+    else showToast('Could not analyse report — check connection and try again');
   }
 }
 
@@ -4014,61 +4322,32 @@ async function confirmSaveReport() {
   isSavingReport = true;
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
-    await addDoc(collection(db, `${base}/reports`), { ...r, addedAt: serverTimestamp() });
+    // Upload image to Firebase Storage and store URL (never write base64 to Firestore)
+    let imageUrl = null;
+    if (window._pendingReportDataUrl) {
+      const path = `families/${FID}/health/${activeHealthProfileId}/reports/${Date.now()}.jpg`;
+      imageUrl = await uploadMediaToStorage(window._pendingReportDataUrl, path);
+      window._pendingReportDataUrl = null;
+    }
+    const docData = { ...r, addedAt: serverTimestamp() };
+    delete docData.imageBase64; // guard: never persist base64
+    if (imageUrl) docData.imageUrl = imageUrl;
+    await addDoc(collection(db, `${base}/reports`), docData);
     await addDoc(collection(db, `${base}/timeline`), { date: r.date || todayStr(), type: 'report', title: r.title, detail: r.aiSummary || r.summary, addedAt: serverTimestamp() });
     showToast('Report saved ✓');
     closeModal('modal-health-report');
     window._pendingReport = null;
     renderHealthReports();
-  } catch(e) { console.error(e); showToast('Error saving'); }
+  } catch(e) { console.error(e); showToast('Error saving report'); }
   finally { isSavingReport = false; }
 }
 
-// Reuse existing receipt vision logic but specialized
+// Vision analysis proxied through Cloud Function — no API key in browser
 async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODELS.medicalReports) {
-  const apiKey = window.FAMILYOS_OCR_CONFIG?.anthropicKey;
-  if(!apiKey) {
-    showToast('Anthropic API key is missing in config.js');
-    throw new Error('Claude API key missing');
-  }
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: model,
-      max_tokens: 2000,
-      system,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/jpeg',
-              data: base64NoPrefix
-            }
-          },
-          {
-            type: 'text',
-            text: prompt
-          }
-        ]
-      }]
-    })
-  });
-  if (!response.ok) {
-    const err = await response.json();
-    console.error('Claude API error:', err);
-    throw new Error(`API error ${response.status}: ${err.error?.message || 'Unknown'}`);
-  }
-  const data = await response.json();
-  return data.content[0].text;
+  if (!FID || !functions) throw new Error('Not initialized');
+  const fn = httpsCallable(functions, 'analyzeHealthMedia');
+  const res = await fn({ fid: FID, base64Image: base64NoPrefix, mediaType: 'image/jpeg', systemPrompt: system, userPrompt: prompt, model });
+  return res.data.text;
 }
 
 async function saveMedication() {
@@ -4095,6 +4374,15 @@ async function toggleMedActive(id, active) {
   } catch(e) { console.error(e); }
 }
 
+async function toggleMedAdherence(medId, taken) {
+  const today = todayStr();
+  const ref = doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/adherence`, today);
+  try {
+    await setDoc(ref, { [medId]: taken, updatedAt: serverTimestamp() }, { merge: true });
+    showToast(taken ? 'Marked as taken ✓' : 'Unmarked');
+  } catch(e) { console.error(e); showToast('Error updating adherence'); }
+}
+
 async function saveVisit() {
   const date = document.getElementById('hv-date').value;
   const hospital = document.getElementById('hv-hospital').value.trim();
@@ -4114,7 +4402,12 @@ async function saveVisit() {
     await addDoc(collection(db, `${base}/timeline`), { date, type: 'visit', title: `${type.toUpperCase()} at ${hospital}`, detail: notes.slice(0, 100), addedAt: serverTimestamp() });
     showToast('Visit saved ✓');
     closeModal('modal-health-visit');
-  } catch(e) { console.error(e); showToast('Error saving'); }
+  } catch(e) {
+    console.error('saveVisit exception:', e);
+    if (e.code === 'resource-exhausted' || e.message?.includes('Rate limited')) showToast('Too many requests — please wait 30 seconds');
+    else if (e.code === 'unauthenticated') showToast('Session expired — please reload');
+    else showToast('Error saving visit — try again');
+  }
 }
 
 async function handleHealthBillPhoto(input) {
@@ -4131,8 +4424,13 @@ async function handleHealthBillPhoto(input) {
     document.getElementById('hb-amount').value = b.amount || 0;
     document.getElementById('hb-cat').value = b.category || 'procedure';
     document.getElementById('hb-preview').style.display = 'block';
-    window._pendingBillBase64 = 'data:image/jpeg;base64,' + base64NoPrefix;
-  } catch(e) { console.error(e); showToast('Bill reading failed'); }
+    window._pendingBillDataUrl = 'data:image/jpeg;base64,' + base64NoPrefix;
+  } catch(e) {
+    console.error('handleHealthBillPhoto exception:', e);
+    if (e.code === 'resource-exhausted' || e.message?.includes('Rate limited')) showToast('Too many requests — please wait 30 seconds');
+    else if (e.code === 'unauthenticated') showToast('Session expired — please reload');
+    else showToast('Bill reading failed — try again');
+  }
 }
 
 async function saveHealthBill() {
@@ -4140,20 +4438,30 @@ async function saveHealthBill() {
   const hospital = document.getElementById('hb-hospital').value.trim();
   const amount = parseFloat(document.getElementById('hb-amount').value);
   const category = document.getElementById('hb-cat').value;
-  const base64 = window._pendingBillBase64;
+  const claimStatus = document.getElementById('hb-claim')?.value || 'none';
 
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
-    await addDoc(collection(db, `${base}/bills`), { date, hospital, amount, category, imageBase64: base64, addedAt: serverTimestamp() });
-    
+    // Upload bill image to Firebase Storage if present
+    let imageUrl = null;
+    if (window._pendingBillDataUrl) {
+      const path = `families/${FID}/health/${activeHealthProfileId}/bills/${Date.now()}.jpg`;
+      imageUrl = await uploadMediaToStorage(window._pendingBillDataUrl, path);
+      window._pendingBillDataUrl = null;
+    }
+    const billDoc = { date, hospital, amount, category, claimStatus, addedAt: serverTimestamp() };
+    if (imageUrl) billDoc.imageUrl = imageUrl;
+    await addDoc(collection(db, `${base}/bills`), billDoc);
+
     // Also save to main expenses with a health tag
-    await addDoc(collection(db, `families/${FID}/expenses`), { 
-      date, desc: `Health: ${hospital} (${category})`, amount, cat: 'Other', room: 'General', by: 'self', notes: `Patient: ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).name}`, createdAt: serverTimestamp() 
+    await addDoc(collection(db, `families/${FID}/expenses`), {
+      date, desc: `Health: ${hospital} (${category})`, amount, cat: 'Other', room: 'General', by: 'self',
+      notes: `Patient: ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).name}`, createdAt: serverTimestamp()
     });
 
     showToast('Bill saved ✓');
     closeModal('modal-health-bill');
-  } catch(e) { console.error(e); showToast('Error saving'); }
+  } catch(e) { console.error(e); showToast('Error saving bill'); }
 }
 
 async function generateDoctorSummary() {
@@ -4168,14 +4476,45 @@ async function generateDoctorSummary() {
   
   try {
     const summary = await callClaudeHealth(prompt, context);
-    const win = window.open('', '_blank');
-    win.document.write(`<html><body style="font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:auto">
-      <h1 style="color:#C9A84C">Medical Summary: ${p.name}</h1>
-      <p style="white-space:pre-wrap">${summary}</p>
-      <hr style="margin:40px 0;opacity:0.2">
-      <p style="font-size:12px;color:#888;text-align:center">Generated by FamilyOS · Take a screenshot to share with your doctor</p>
-    </body></html>`);
+    window._doctorSummaryText = `Medical Summary: ${p.name}\n\n${summary}\n\n— Generated by FamilyOS`;
+    document.getElementById('doctor-summary-content').textContent = window._doctorSummaryText;
+    openModal('modal-doctor-summary');
   } catch(e) { console.error(e); showToast('AI error'); }
+}
+
+function copyDoctorSummary() {
+  navigator.clipboard.writeText(window._doctorSummaryText || '').then(() => showToast('Copied ✓'));
+}
+
+function shareDoctorSummary() {
+  if(navigator.canShare && navigator.canShare({ text: window._doctorSummaryText })) {
+    navigator.share({ title: 'Doctor Summary', text: window._doctorSummaryText });
+  } else {
+    copyDoctorSummary();
+  }
+}
+
+let _selectedSeverity = 3;
+function selectSeverity(n) {
+  _selectedSeverity = n;
+  for(let i = 1; i <= 5; i++) {
+    const btn = document.getElementById(`sev-btn-${i}`);
+    if(btn) btn.style.background = i === n ? 'var(--gold)' : '';
+  }
+}
+
+async function saveSymptom() {
+  const symptom = document.getElementById('symptom-text')?.value?.trim();
+  if(!symptom) { showToast('Enter a symptom'); return; }
+  try {
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/symptoms`), {
+      symptom, severity: _selectedSeverity, recordedAt: serverTimestamp()
+    });
+    document.getElementById('symptom-text').value = '';
+    _selectedSeverity = 3;
+    document.getElementById('symptom-quick-form').style.display = 'none';
+    showToast('Symptom logged ✓');
+  } catch(e) { console.error(e); showToast('Error saving symptom'); }
 }
 
 async function parseMedVoice(transcript) {
@@ -4976,53 +5315,16 @@ window.logEmiPayment=async()=>{
   closeModal('modal-emi');showToast(`EMI logged ✓ · ₹${Number(amt).toLocaleString('en-IN')}`);setSyncing(false);
 };
 
-// TODO: Move OCR/parse API calls to Cloud Function before public launch.
-function getOcrConfig(){
-  const c=window.FAMILYOS_OCR_CONFIG||{};
-  const p=c.provider||'openai';
-  const k=p==='openai'?(c.openaiKey||''):(c.anthropicKey||'');
-  return {provider:p,key:k};
-}
-
+// Receipt OCR proxied through Cloud Function — no API keys in browser
 async function parseReceiptWithOCR(dataUrl){
-  const {provider,key}=getOcrConfig(); if(!key) return null;
-  if(provider==='openai'){
-    try{
-      const res=await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,
-          messages:[{role:'user',content:[
-            {type:'image_url',image_url:{url:dataUrl}},
-            {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
-          ]}]})
-      });
-      if(!res.ok) return null;
-      const json=await res.json();
-      const text=json.choices?.[0]?.message?.content||'';
-      const match=text.match(/\{[\s\S]*\}/);
-      if(!match) return null;
-      return JSON.parse(match[0]);
-    }catch(e){ console.warn('OpenAI OCR failed',e); return null; }
-  }
-  const m=dataUrl.match(/^data:image\/(\w+);base64,(.+)$/); if(!m) return null;
-  const mediaType='image/'+(m[1]==='jpeg'?'jpeg':'png');
-  const base64Data=m[2];
+  if(!FID||!functions) return null;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:base64Data}},
-          {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
-        ]}]})
-    });
-    if(!res.ok) return null;
-    const json=await res.json();
-    const text=json.content?.[0]?.text||'';
-    const match=text.match(/\{[\s\S]*\}/);
-    if(!match) return null;
-    return JSON.parse(match[0]);
-  }catch(e){ console.warn('Anthropic OCR failed',e); return null; }
+    const m=dataUrl.match(/^data:image\/(\w+);base64,(.+)$/); if(!m) return null;
+    const mediaType='image/'+(m[1]==='jpeg'?'jpeg':'png');
+    const fn=httpsCallable(functions,'parseReceiptOCR');
+    const res=await fn({fid:FID,base64Image:m[2],mediaType});
+    return res.data.result||null;
+  }catch(e){ console.warn('Receipt OCR failed',e); return null; }
 }
 
 window.handleExpensePaste=async e=>{
@@ -5040,35 +5342,12 @@ window.handleExpensePaste=async e=>{
 };
 
 async function parsePastedText(text){
-  const {provider,key}=getOcrConfig(); if(!key) return null;
-  if(!text||text.length<10) return null;
-  const prompt=`Parse this pasted text (e.g. from WhatsApp) for expense details. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.\n\n${text.slice(0,2000)}`;
-  if(provider==='openai'){
-    try{
-      const res=await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
-      });
-      if(!res.ok) return null;
-      const json=await res.json();
-      const out=json.choices?.[0]?.message?.content||'';
-      const match=out.match(/\{[\s\S]*\}/);
-      if(!match) return null;
-      return JSON.parse(match[0]);
-    }catch(e){ console.warn('OpenAI parse failed',e); return null; }
-  }
+  if(!FID||!functions||!text||text.length<10) return null;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
-    });
-    if(!res.ok) return null;
-    const json=await res.json();
-    const out=json.content?.[0]?.text||'';
-    const match=out.match(/\{[\s\S]*\}/);
-    if(!match) return null;
-    return JSON.parse(match[0]);
-  }catch(e){ console.warn('Anthropic parse failed',e); return null; }
+    const fn=httpsCallable(functions,'parseReceiptOCR');
+    const res=await fn({fid:FID,pastedText:text});
+    return res.data.result||null;
+  }catch(e){ console.warn('Paste parse failed',e); return null; }
 }
 
 window.handlePhoto=async input=>{
