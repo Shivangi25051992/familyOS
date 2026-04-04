@@ -1623,6 +1623,32 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   </div>
 </div>
 
+<!-- DOCTOR SUMMARY MODAL -->
+<div class="modal-overlay" id="modal-doctor-summary">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 Doctor Summary <button class="modal-close" onclick="closeModal('modal-doctor-summary')">✕</button></div>
+    <div id="doctor-summary-content" style="flex:1;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--text-dim);margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px;flex-shrink:0">
+      <button class="btn-primary" style="flex:1" onclick="copyDoctorSummary()">📋 Copy</button>
+      <button class="btn-sm fill" style="flex:1" onclick="shareDoctorSummary()">↗ Share</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEALTH PDF EXPORT MODAL -->
+<div class="modal-overlay" id="modal-health-pdf">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📄 Health Report <button class="modal-close" onclick="closeModal('modal-health-pdf')">✕</button></div>
+    <div id="health-pdf-content" style="flex:1;overflow-y:auto;font-size:12px;line-height:1.7;color:var(--text-dim);margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px;flex-shrink:0">
+      <button class="btn-primary" style="flex:1" onclick="copyHealthPDF()">📋 Copy</button>
+      <button class="btn-sm fill" style="flex:1" onclick="shareHealthPDF()">↗ Share</button>
+    </div>
+  </div>
+</div>
+
 <!-- HEALTH MODULE MODALS -->
 <!-- ADD PATIENT -->
 <div class="modal-overlay" id="modal-add-patient">
@@ -5520,15 +5546,23 @@ function renderHealthProfiles() {
   
   let html = '';
   
+  const conditionColors = {'Cancer':'#e05c5c','Diabetes':'#3498db','Hypertension':'#e74c3c','Thyroid Disorder':'#9b59b6','Heart Disease':'#c0392b','Kidney Disease':'#16a085','Obesity / Fatty Liver':'#e67e22','PCOS/PCOD':'#8e44ad','Asthma / COPD':'#2980b9','Arthritis':'#7f8c8d','Fitness & Wellness':'#27ae60','Post-Surgery Recovery':'#d35400','Mental Health':'#6c5ce7','Pregnancy':'#fd79a8','Other / General':'#C9A84C'};
+
   // Owned profiles
   if (ownedProfiles.length > 0) {
-    html += ownedProfiles.map(p => `
-      <div class="health-card" onclick="openPatientDashboard('${p.id}')">
-        <div class="health-card-title">${safeHtml(p.name)}</div>
-        <div class="health-card-sub">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
-        <div style="font-size:10px;color:var(--text-faint)">Last updated: ${p.updatedAt ? fmtDate(p.updatedAt.toDate()) : '—'}</div>
-      </div>
-    `).join('');
+    html += ownedProfiles.map(p => {
+      const badgeColor = conditionColors[p.conditionType] || conditionColors['Other / General'];
+      const badge = p.conditionType ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:${badgeColor};color:#fff;white-space:nowrap;flex-shrink:0">${safeHtml(p.conditionType)}</span>` : '';
+      return `
+        <div class="health-card" onclick="openPatientDashboard('${p.id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+            <div class="health-card-title">${safeHtml(p.name)}</div>
+            ${badge}
+          </div>
+          <div class="health-card-sub">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
+          <div style="font-size:10px;color:var(--text-faint)">Last updated: ${p.updatedAt ? fmtDate(p.updatedAt.toDate()) : '—'}</div>
+        </div>`;
+    }).join('');
   }
   
   // Shared profiles
@@ -6246,7 +6280,7 @@ function renderHealthMeds() {
         <div class="health-card-title" style="margin-bottom:10px">📝 Care Notes & Supplements</div>
         ${notes.map(n => `
           <div style="padding:8px 0;border-bottom:1px solid var(--gold-border)">
-            <div style="font-size:12px;color:var(--text);line-height:1.5">${safeHtml(n.text || '')}</div>
+            <div style="font-size:12px;color:var(--text);line-height:1.5">${formatChatResponse(n.text || '')}</div>
             <div style="font-size:10px;color:var(--text-faint);margin-top:4px;font-family:'DM Mono',monospace">
               ${safeHtml(n.category || 'note').toUpperCase()} · ${n.date ? formatReportDate(n.date) : 'today'}
             </div>
@@ -7964,7 +7998,7 @@ function renderPendingReportPreview(reportData){
   if (analysis) {
     analysis.innerHTML =
       '<div class="health-card-title">' + safeHtml(reportData.title || 'Report') + '</div>' +
-      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">' + safeHtml(reportData.aiSummary || reportData.summary || '') + '</div>' +
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">' + formatChatResponse(reportData.aiSummary || reportData.summary || '') + '</div>' +
       '<div style="font-size:11px;color:var(--gold)">Urgency: ' + safeHtml(reportData.urgency || 'routine') + '</div>';
   }
   const preview = document.getElementById('health-report-preview');
@@ -8305,14 +8339,23 @@ async function generateDoctorSummary() {
   
   try {
     const summary = await callClaudeHealth(prompt, context);
-    const win = window.open('', '_blank');
-    win.document.write(`<html><body style="font-family:sans-serif;padding:40px;line-height:1.6;max-width:800px;margin:auto">
-      <h1 style="color:#C9A84C">Medical Summary: ${p.name}</h1>
-      <p style="white-space:pre-wrap">${summary}</p>
-      <hr style="margin:40px 0;opacity:0.2">
-      <p style="font-size:12px;color:#888;text-align:center">Generated by FamilyOS · Take a screenshot to share with your doctor</p>
-    </body></html>`);
-  } catch(e) { console.error(e); showToast('AI error'); }
+    window._doctorSummaryText = `Medical Summary: ${p.name}\n${'─'.repeat(40)}\n\n${summary}\n\n— Generated by FamilyOS`;
+    document.getElementById('doctor-summary-content').innerHTML = formatChatResponse(summary);
+    openModal('modal-doctor-summary');
+  } catch(e) { console.error(e); showToast('AI error — please try again'); }
+}
+
+function copyDoctorSummary() {
+  navigator.clipboard.writeText(window._doctorSummaryText || '').then(() => showToast('Copied to clipboard ✓'));
+}
+
+function shareDoctorSummary() {
+  const text = window._doctorSummaryText || '';
+  if(navigator.canShare && navigator.canShare({ text })) {
+    navigator.share({ title: 'Doctor Summary — FamilyOS', text });
+  } else {
+    copyDoctorSummary();
+  }
 }
 
 function exportHealthPDF() {
@@ -8384,11 +8427,34 @@ function exportHealthPDF() {
   
   html += '<hr style="margin:40px 0;opacity:0.2">';
   html += '<p style="font-size:11px;color:#888;text-align:center">Generated by FamilyOS on ' + today + '</p>';
-  html += '</body></html>';
-  
-  const win = window.open('', '_blank');
-  win.document.write(html);
-  setTimeout(() => win.print(), 500);
+
+  // Build plain-text version for sharing
+  const p2 = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  let plainText = `Health Report — ${safeHtml(p2?.name || '')}\nDate: ${today}\n\n`;
+  plainText += `Diagnosis: ${safeHtml(p2?.diagnosis || '')}\n\n`;
+  plainText += `Medications (${medications.length}):\n` + medications.map(m => `• ${m.name} ${m.dose} — ${m.frequency}`).join('\n') + '\n\n';
+  plainText += `Recent Reports:\n` + reports.map(r => `• ${r.title} (${formatReportDate(r.date)}): ${(r.aiSummary||'').slice(0,120)}`).join('\n');
+  window._healthPdfText = plainText;
+
+  // Render in modal
+  const contentEl = document.getElementById('health-pdf-content');
+  if(contentEl) {
+    contentEl.innerHTML = html.replace(/<html>.*?<body[^>]*>/s, '').replace(/<\/body><\/html>/s, '');
+    openModal('modal-health-pdf');
+  }
+}
+
+function copyHealthPDF() {
+  navigator.clipboard.writeText(window._healthPdfText || '').then(() => showToast('Report copied ✓'));
+}
+
+function shareHealthPDF() {
+  const text = window._healthPdfText || '';
+  if(navigator.canShare && navigator.canShare({ text })) {
+    navigator.share({ title: 'Health Report — FamilyOS', text });
+  } else {
+    copyHealthPDF();
+  }
 }
 
 async function parseMedVoice(transcript) {
@@ -9387,52 +9453,18 @@ window.logEmiPayment=async()=>{
 };
 
 // TODO: Move OCR/parse API calls to Cloud Function before public launch.
-function getOcrConfig(){
-  const c=window.FAMILYOS_OCR_CONFIG||{};
-  const p=c.provider||'openai';
-  const k=p==='openai'?(c.openaiKey||''):(c.anthropicKey||'');
-  return {provider:p,key:k};
-}
-
+// OCR via Cloud Function — no API keys in browser
 async function parseReceiptWithOCR(dataUrl){
-  const {provider,key}=getOcrConfig(); if(!key) return null;
-  if(provider==='openai'){
-    try{
-      const res=await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,
-          messages:[{role:'user',content:[
-            {type:'image_url',image_url:{url:dataUrl}},
-            {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
-          ]}]})
-      });
-      if(!res.ok) return null;
-      const json=await res.json();
-      const text=json.choices?.[0]?.message?.content||'';
-      const match=text.match(/\{[\s\S]*\}/);
-      if(!match) return null;
-      return JSON.parse(match[0]);
-    }catch(e){ console.warn('OpenAI OCR failed',e); return null; }
+  if(!FID || !functions) return null;
+  try {
+    const fn = httpsCallable(functions, 'parseReceiptOCR');
+    const res = await fn({ fid: FID, dataUrl });
+    return res.data || null;
+  } catch(e) {
+    console.warn('Receipt OCR failed', e);
+    if (e.code === 'resource-exhausted') showToast('Too many scans — wait 10 seconds');
+    return null;
   }
-  const m=dataUrl.match(/^data:image\/(\w+);base64,(.+)$/); if(!m) return null;
-  const mediaType='image/'+(m[1]==='jpeg'?'jpeg':'png');
-  const base64Data=m[2];
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:base64Data}},
-          {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
-        ]}]})
-    });
-    if(!res.ok) return null;
-    const json=await res.json();
-    const text=json.content?.[0]?.text||'';
-    const match=text.match(/\{[\s\S]*\}/);
-    if(!match) return null;
-    return JSON.parse(match[0]);
-  }catch(e){ console.warn('Anthropic OCR failed',e); return null; }
 }
 
 window.handleExpensePaste=async e=>{
@@ -9449,36 +9481,17 @@ window.handleExpensePaste=async e=>{
   }
 };
 
+// Pasted text parsing via Cloud Function — no API keys in browser
 async function parsePastedText(text){
-  const {provider,key}=getOcrConfig(); if(!key) return null;
-  if(!text||text.length<10) return null;
-  const prompt=`Parse this pasted text (e.g. from WhatsApp) for expense details. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.\n\n${text.slice(0,2000)}`;
-  if(provider==='openai'){
-    try{
-      const res=await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
-      });
-      if(!res.ok) return null;
-      const json=await res.json();
-      const out=json.choices?.[0]?.message?.content||'';
-      const match=out.match(/\{[\s\S]*\}/);
-      if(!match) return null;
-      return JSON.parse(match[0]);
-    }catch(e){ console.warn('OpenAI parse failed',e); return null; }
+  if(!FID || !functions || !text || text.length < 10) return null;
+  try {
+    const fn = httpsCallable(functions, 'parseReceiptOCR');
+    const res = await fn({ fid: FID, pastedText: text });
+    return res.data || null;
+  } catch(e) {
+    console.warn('Paste parse failed', e);
+    return null;
   }
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
-    });
-    if(!res.ok) return null;
-    const json=await res.json();
-    const out=json.content?.[0]?.text||'';
-    const match=out.match(/\{[\s\S]*\}/);
-    if(!match) return null;
-    return JSON.parse(match[0]);
-  }catch(e){ console.warn('Anthropic parse failed',e); return null; }
 }
 
 window.handlePhoto=async input=>{
