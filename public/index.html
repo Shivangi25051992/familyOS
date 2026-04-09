@@ -1265,6 +1265,30 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
         <button class="btn-sm" id="health-patient-share-btn" onclick="openShareHealthModal()" style="display:none;margin-right:8px">🔗 Share</button>
         <button class="edit-btn" id="health-patient-delete-btn" onclick="deleteHealthProfile()" style="display:none;font-size:16px">✕</button>
       </div>
+      
+      <!-- Netflix-style Care Chat Search Bar -->
+      <div id="care-chat-search-bar" onclick="openCareChatModal()" style="
+        margin:16px 16px 12px 16px;
+        padding:14px 16px;
+        background:var(--card);
+        border:1px solid var(--gold-border);
+        border-radius:var(--r-lg);
+        display:flex;
+        align-items:center;
+        gap:12px;
+        cursor:pointer;
+        transition:all 0.2s ease;
+      " onmouseover="this.style.borderColor='var(--gold)'" 
+         onmouseout="this.style.borderColor='var(--gold-border)'">
+        <div style="font-size:20px">🤖</div>
+        <div style="flex:1;color:var(--text-dim);font-size:14px">
+          Ask about symptoms, medications, reports...
+        </div>
+        <div style="font-size:11px;color:var(--gold);font-weight:600;padding:2px 8px;background:var(--gold-soft);border-radius:4px">
+          BETA
+        </div>
+      </div>
+      
       <div class="chip-row" id="health-tabs" style="overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none">
         <button class="chip on" onclick="switchHealthTab('overview',this)" style="white-space:nowrap">Overview</button>
         <button class="chip" onclick="switchHealthTab('vitals',this)" style="white-space:nowrap">Vitals</button>
@@ -1865,6 +1889,66 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <textarea class="form-input" id="symptom-notes" placeholder="Any additional details..." rows="3" style="resize:vertical"></textarea>
     </div>
     <button class="btn-primary" onclick="saveSymptom()" style="width:100%">Log Symptom</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-care-chat-full" style="background:var(--bg)">
+  <div class="modal" style="max-width:100%;height:100vh;margin:0;border-radius:0;padding:0;background:var(--bg)">
+    <!-- Header -->
+    <div style="padding:20px;border-bottom:1px solid var(--gold-border);display:flex;justify-content:space-between;align-items:center;background:var(--surface)">
+      <div>
+        <div style="font-size:20px;font-weight:700;color:var(--gold)">Care Chat</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:4px">
+          AI-powered health insights
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:10px;color:var(--gold);font-weight:600;padding:3px 8px;background:var(--gold-soft);border-radius:4px">BETA</span>
+        <button class="modal-close" onclick="closeModal('modal-care-chat-full')" style="font-size:24px;padding:8px">✕</button>
+      </div>
+    </div>
+
+    <!-- Quick suggestions -->
+    <div style="padding:20px;border-bottom:1px solid var(--gold-border);background:var(--surface)">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+        Quick questions:
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px" id="care-chat-suggestions">
+        <!-- Dynamic chips will be inserted here -->
+      </div>
+    </div>
+
+    <!-- Main input -->
+    <div style="padding:20px;background:var(--surface)">
+      <div style="position:relative">
+        <input 
+          type="text" 
+          id="care-chat-input"
+          placeholder="What would you like to know about their care?"
+          style="width:100%;padding:16px 50px 16px 16px;font-size:15px;background:var(--card);border:2px solid var(--gold-border);border-radius:var(--r-lg);color:var(--text)"
+          onkeypress="if(event.key==='Enter') sendCareChatQuery()"
+        >
+        <button 
+          onclick="startCareChatVoice()"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-dim)"
+          title="Voice input"
+        >
+          🎤
+        </button>
+      </div>
+      <button 
+        class="btn-primary" 
+        onclick="sendCareChatQuery()" 
+        style="width:100%;margin-top:12px;padding:14px;font-size:15px"
+      >
+        Ask AI
+      </button>
+    </div>
+
+    <!-- Chat history -->
+    <div id="care-chat-history" style="padding:20px;max-height:calc(100vh - 400px);overflow-y:auto">
+      <!-- Previous conversations will appear here -->
+    </div>
   </div>
 </div>
 
@@ -5174,6 +5258,225 @@ window.saveSymptom = async function() {
     console.error('Error logging symptom:', e);
     showToast('Error logging symptom');
   }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// Netflix-Style Care Chat Modal
+// ═══════════════════════════════════════════════════════════════
+
+window.openCareChatModal = function() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return;
+  
+  // Generate contextual suggestions
+  const suggestions = getCareChatSuggestions();
+  const suggestionsHtml = suggestions.map(s => 
+    `<button class="chip" onclick="askCareChatSuggestion('${s.replace(/'/g, "\\'")}')" style="white-space:nowrap;font-size:13px">${safeHtml(s)}</button>`
+  ).join('');
+  
+  document.getElementById('care-chat-suggestions').innerHTML = suggestionsHtml;
+  
+  // Clear input
+  document.getElementById('care-chat-input').value = '';
+  
+  // Load recent chat history
+  loadCareChatHistory();
+  
+  // Open modal
+  openModal('modal-care-chat-full');
+  
+  // Focus input after a brief delay
+  setTimeout(() => {
+    document.getElementById('care-chat-input').focus();
+  }, 300);
+};
+
+function getCareChatSuggestions() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return [];
+  
+  const suggestions = [];
+  
+  // Based on recent reports
+  if (activePatientData.reports.length > 0) {
+    suggestions.push("What do the latest blood tests show?");
+  }
+  
+  // Based on medications
+  if (activePatientData.medications.filter(m => m.active !== false).length > 0) {
+    suggestions.push("Any medication side effects?");
+  }
+  
+  // Based on condition type
+  if (p.conditionType === 'Cancer') {
+    suggestions.push("How is treatment progressing?");
+    suggestions.push("What should I watch for?");
+  } else if (p.conditionType === 'Diabetes') {
+    suggestions.push("How are blood sugar levels?");
+  } else if (p.conditionType === 'Hypertension') {
+    suggestions.push("How is blood pressure trending?");
+  }
+  
+  // Based on symptoms
+  if (activePatientData.symptoms && activePatientData.symptoms.length > 0) {
+    suggestions.push("Explain recent symptoms");
+  }
+  
+  // Generic
+  suggestions.push("Summarize health status");
+  suggestions.push("Prepare for doctor visit");
+  
+  return suggestions.slice(0, 6); // Max 6 chips
+}
+
+window.askCareChatSuggestion = function(question) {
+  document.getElementById('care-chat-input').value = question;
+  sendCareChatQuery();
+};
+
+window.sendCareChatQuery = async function() {
+  const input = document.getElementById('care-chat-input');
+  const question = input.value.trim();
+  
+  if (!question) {
+    showToast('Please enter a question');
+    return;
+  }
+  
+  // Clear input
+  input.value = '';
+  
+  // Add user message to history
+  addCareChatMessage('user', question);
+  
+  // Show loading
+  addCareChatMessage('assistant', '...', true);
+  
+  try {
+    // Call existing askHealthAI function
+    const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+    const context = buildHealthContext(p);
+    const answer = await callClaudeHealth(question, context, false, LLM_MODELS.medicalQA, 800);
+    
+    // Remove loading message
+    const historyEl = document.getElementById('care-chat-history');
+    const loadingMsg = historyEl.querySelector('[data-loading="true"]');
+    if (loadingMsg) loadingMsg.remove();
+    
+    // Add AI response
+    addCareChatMessage('assistant', answer);
+    
+    // Save to Firestore
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`), {
+      question: question,
+      answer: answer,
+      createdAt: serverTimestamp(),
+      createdBy: CU.uid
+    });
+    
+  } catch(e) {
+    console.error('Care chat error:', e);
+    
+    // Remove loading message
+    const historyEl = document.getElementById('care-chat-history');
+    const loadingMsg = historyEl.querySelector('[data-loading="true"]');
+    if (loadingMsg) loadingMsg.remove();
+    
+    addCareChatMessage('assistant', '❌ Error: ' + (e.message || 'Failed to get response'));
+  }
+};
+
+function addCareChatMessage(role, text, isLoading = false) {
+  const historyEl = document.getElementById('care-chat-history');
+  const isUser = role === 'user';
+  
+  const msgDiv = document.createElement('div');
+  msgDiv.style.cssText = `
+    margin-bottom:16px;
+    display:flex;
+    flex-direction:column;
+    align-items:${isUser ? 'flex-end' : 'flex-start'};
+  `;
+  
+  if (isLoading) {
+    msgDiv.setAttribute('data-loading', 'true');
+  }
+  
+  const bubble = document.createElement('div');
+  bubble.style.cssText = `
+    max-width:80%;
+    padding:12px 16px;
+    border-radius:${isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px'};
+    background:${isUser ? 'var(--gold)' : 'var(--card)'};
+    color:${isUser ? 'var(--bg)' : 'var(--text)'};
+    font-size:14px;
+    line-height:1.6;
+    white-space:pre-wrap;
+    word-wrap:break-word;
+  `;
+  
+  bubble.textContent = text;
+  
+  msgDiv.appendChild(bubble);
+  historyEl.appendChild(msgDiv);
+  
+  // Scroll to bottom
+  historyEl.scrollTop = historyEl.scrollHeight;
+}
+
+function loadCareChatHistory() {
+  const historyEl = document.getElementById('care-chat-history');
+  historyEl.innerHTML = '';
+  
+  // Show last 5 conversations from activePatientData.chatHistory
+  const recentChats = (activePatientData.chatHistory || []).slice(-5);
+  
+  if (recentChats.length === 0) {
+    historyEl.innerHTML = `
+      <div style="text-align:center;color:var(--text-dim);padding:40px 20px;font-size:14px">
+        <div style="font-size:32px;margin-bottom:12px">💬</div>
+        <div>No previous conversations</div>
+        <div style="font-size:12px;margin-top:8px">Ask a question to get started!</div>
+      </div>
+    `;
+    return;
+  }
+  
+  recentChats.forEach(chat => {
+    addCareChatMessage('user', chat.question);
+    addCareChatMessage('assistant', chat.answer);
+  });
+}
+
+window.startCareChatVoice = function() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported in this browser');
+    return;
+  }
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recognition = new SpeechRecognition();
+  
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  
+  recognition.onstart = function() {
+    showToast('🎤 Listening...');
+  };
+  
+  recognition.onresult = function(event) {
+    const transcript = event.results[0][0].transcript;
+    document.getElementById('care-chat-input').value = transcript;
+    showToast('Got it! ✓');
+  };
+  
+  recognition.onerror = function(event) {
+    console.error('Speech recognition error:', event.error);
+    showToast('Voice input failed');
+  };
+  
+  recognition.start();
 };
 
 async function deleteHealthProfile() {
