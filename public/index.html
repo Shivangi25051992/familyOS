@@ -5364,8 +5364,8 @@ window.sendCareChatQuery = async function() {
   try {
     // Call existing askHealthAI function
     const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-    const context = buildHealthContext(p);
-    const answer = await callClaudeHealth(question, context, false, LLM_MODELS.medicalQA, 800);
+    const context = buildHealthChatContext(p);
+    const answer = await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, 800);
     
     // Remove loading message
     const historyEl = document.getElementById('care-chat-history');
