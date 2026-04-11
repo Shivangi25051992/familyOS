@@ -11506,6 +11506,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (e.key === 'Escape') ashaCloseInput();
     });
   }
+  
+  // Initialize light mode toggle state
+  const toggle = document.getElementById('light-mode-toggle');
+  if (toggle) {
+    const savedTheme = LS.get('familyos_theme') || 'dark';
+    toggle.checked = savedTheme === 'light';
+  }
 });
 
 // ═══════════════════════════════════════════════════════════════
