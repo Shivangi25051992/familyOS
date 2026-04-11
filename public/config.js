@@ -1,9 +1,9 @@
-// TEMPORARY: API key restored for testing
-// TODO: Move to Cloud Functions (see PHASE_12_API_SECURITY.md)
+// API keys removed for security - implement Cloud Functions
+// See PHASE_12_API_SECURITY.md for implementation details
 
 window.FAMILYOS_OCR_CONFIG = {
     provider: "anthropic",
-    anthropicKey: "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"
+    anthropicKey: "" // TODO: Implement Cloud Functions
 };
 
 window.FAMILYOS_GMAIL_CLIENT_ID = "";
