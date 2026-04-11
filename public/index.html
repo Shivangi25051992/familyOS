@@ -11473,17 +11473,179 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Placeholder functions for Phase 2
+// ═══════════════════════════════════════════════════════════════
+// PHASE 2: VOICE INPUT WITH SMART INTENT DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+let _ashaRecognition = null;
+let _ashaListening = false;
+
 function ashaToggleMic() {
-  showToast('Voice input coming in Phase 2');
+  if (_ashaListening) { _stopMic(); return; }
+  _startMic();
+}
+
+function _startMic() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { showToast('Voice not supported on this browser'); return; }
+
+  const btn = document.getElementById('asha-mic-btn');
+  if (btn) { btn.textContent = '🔴'; btn.title = 'Tap to stop'; }
+  _ashaListening = true;
+
+  _ashaRecognition = new SpeechRecognition();
+  _ashaRecognition.lang = 'en-IN';
+  _ashaRecognition.continuous = false;
+  _ashaRecognition.interimResults = false;
+
+  _ashaRecognition.onresult = async (event) => {
+    const transcript = event.results[0][0].transcript.trim();
+    _stopMic();
+    showToast('Heard: ' + transcript.slice(0, 50));
+    await _ashaProcessVoiceIntent(transcript);
+  };
+
+  _ashaRecognition.onerror = () => { _stopMic(); showToast('Could not hear clearly, try again'); };
+  _ashaRecognition.onend = () => _stopMic();
+  _ashaRecognition.start();
+}
+
+function _stopMic() {
+  _ashaListening = false;
+  const btn = document.getElementById('asha-mic-btn');
+  if (btn) { btn.textContent = '🎤'; btn.title = 'Speak'; }
+  try { _ashaRecognition?.stop(); } catch {}
+}
+
+async function _ashaProcessVoiceIntent(text) {
+  const lower = text.toLowerCase();
+
+  // INTENT: Log vitals — "blood pressure 120/80" "bp 120 over 80" "sugar 140"
+  const bpMatch = lower.match(/(?:bp|blood pressure)\s*(\d{2,3})[\/\s]+(\d{2,3})/);
+  const sugarMatch = lower.match(/(?:sugar|glucose|blood sugar)\s*(?:is\s*)?(\d{2,3})/);
+  const pulseMatch = lower.match(/(?:pulse|heart rate)\s*(?:is\s*)?(\d{2,3})/);
+  const weightMatch = lower.match(/(?:weight)\s*(?:is\s*)?(\d{2,3}(?:\.\d)?)\s*(?:kg)?/);
+  const tempMatch = lower.match(/(?:temp|temperature)\s*(?:is\s*)?(\d{2,3}(?:\.\d)?)/);
+
+  const hasVital = bpMatch || sugarMatch || pulseMatch || weightMatch || tempMatch;
+
+  if (hasVital && activeHealthProfileId) {
+    // Pre-fill vital modal and open
+    openAddVitalModal();
+    if (bpMatch) {
+      const s = document.getElementById('hv2-bp-s');
+      const d = document.getElementById('hv2-bp-d');
+      if (s) s.value = bpMatch[1];
+      if (d) d.value = bpMatch[2];
+    }
+    if (sugarMatch) { const el = document.getElementById('hv2-sugar'); if (el) el.value = sugarMatch[1]; }
+    if (pulseMatch) { const el = document.getElementById('hv2-pulse'); if (el) el.value = pulseMatch[1]; }
+    if (weightMatch) { const el = document.getElementById('hv2-weight'); if (el) el.value = weightMatch[1]; }
+    if (tempMatch) { const el = document.getElementById('hv2-temp'); if (el) el.value = tempMatch[1]; }
+    showToast('Vitals pre-filled — please confirm and save');
+    return;
+  }
+
+  // INTENT: Care note — "note: gave paracetamol" "log: papa ate well"
+  const noteMatch = lower.match(/^(?:note|log|record|note down)[:\s]+(.+)/i);
+  if (noteMatch && activeHealthProfileId) {
+    const noteText = noteMatch[1];
+    try {
+      const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+      await addDoc(collection(db, `${base}/notes`), {
+        text: noteText, category: 'voice', date: todayStr(),
+        addedAt: serverTimestamp(), source: 'voice'
+      });
+      showToast('Care note saved ✓');
+      return;
+    } catch(e) { console.error(e); }
+  }
+
+  // INTENT: Add expense — "add expense 500 food" "spent 1200 medicine"
+  const expMatch = lower.match(/(?:add expense|spent|expense|paid)\s*(?:₹|rs\.?\s*)?(\d+(?:,\d+)?)/i);
+  if (expMatch) {
+    const amount = parseInt(expMatch[1].replace(',',''));
+    const input = document.getElementById('exp-amount');
+    if (input) { input.value = amount; openEditExpense(); }
+    showToast(`Expense ₹${amount} pre-filled`);
+    return;
+  }
+
+  // DEFAULT: Route to Asha chat
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    openCareChatModal();
+    setTimeout(() => {
+      const chatInput = document.getElementById('care-chat-input');
+      if (chatInput) { chatInput.value = text; sendCareChatQuery(); }
+    }, 300);
+  } else {
+    // Show the typed query in asha bar
+    ashaOpenWithQuery(text);
+  }
 }
 
 function ashaAttachFile() {
-  showToast('File attachment coming in Phase 2');
+  document.getElementById('asha-file-input')?.click();
 }
 
-function ashaHandleAttachment(input) {
-  // Phase 2 implementation
+async function ashaHandleAttachment(input) {
+  const file = input.files[0]; if (!file) return;
+  // Route: if on health screen → handle as report or prescription photo
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    // Ask user what this is
+    const choice = await ashaAttachmentChoice();
+    if (choice === 'report') {
+      // Trigger report upload flow
+      const ri = document.getElementById('health-report-input');
+      if (ri) {
+        const dt = new DataTransfer(); dt.items.add(file);
+        ri.files = dt.files;
+        handleHealthReport(ri);
+        openModal('modal-health-report');
+      }
+    } else if (choice === 'prescription') {
+      const dt = new DataTransfer(); dt.items.add(file);
+      const medInput = document.getElementById('health-med-photo');
+      if (medInput) {
+        medInput.files = dt.files;
+        handleMedPhoto({ target: medInput });
+        openModal('modal-health-med');
+      }
+    } else if (choice === 'bill') {
+      const dt = new DataTransfer(); dt.items.add(file);
+      const billInput = document.getElementById('health-bill-photo');
+      if (billInput) {
+        billInput.files = dt.files;
+        handleBillPhoto({ target: billInput });
+        openModal('modal-health-bill');
+      }
+    }
+  }
+}
+
+function ashaAttachmentChoice() {
+  return new Promise(resolve => {
+    // Simple bottom sheet choice
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--surface);border-top:1px solid var(--gold-border);border-radius:20px 20px 0 0;padding:20px;';
+    sheet.innerHTML = `
+      <div style="font-size:13px;color:var(--text-faint);margin-bottom:16px;text-align:center">What is this photo?</div>
+      ${['report','prescription','bill'].map(t =>
+        `<button onclick="document.body.removeChild(this.closest('div[style*=fixed]'));window._ashachoice('${t}')" 
+          style="width:100%;padding:14px;background:var(--card);border:1px solid var(--gold-border);border-radius:12px;margin-bottom:8px;color:var(--text);font-size:14px;cursor:pointer;">
+          ${{report:'📄 Medical Report',prescription:'💊 Prescription',bill:'🧾 Hospital Bill'}[t]}
+        </button>`
+      ).join('')}
+      <button onclick="document.body.removeChild(this.closest('div[style*=fixed]'));window._ashachoice(null)" 
+        style="width:100%;padding:14px;background:transparent;border:1px solid var(--gold-border);border-radius:12px;color:var(--text-dim);font-size:14px;cursor:pointer;">
+        Cancel
+      </button>
+    `;
+    window._ashachoice = resolve;
+    document.body.appendChild(sheet);
+  });
 }
 
 window.ashaAskChip = ashaAskChip;
