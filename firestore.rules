@@ -198,6 +198,14 @@ service cloud.firestore {
           allow update: if isFamilyMember(familyId);
           allow delete: if isFamilyMember(familyId);
         }
+        
+        match /symptoms/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+        }
       }
     }
 
@@ -261,6 +269,11 @@ service cloud.firestore {
     }
     
     match /{path=**}/healthProfiles/{profileId}/reminders/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/symptoms/{docId} {
       allow read: if isSignedIn()
         && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
     }
