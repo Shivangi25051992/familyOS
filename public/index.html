@@ -537,6 +537,17 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   background: var(--green-soft);
 }
 .login-state { animation: fadeIn 0.2s ease; }
+
+/* ── ASHA GLOBAL AI BAR ── */
+#asha-bar { transition: bottom 0.2s ease; }
+#asha-bar.typing { bottom: 0; }
+.asha-chip {
+  white-space:nowrap; font-size:11px; padding:5px 10px;
+  background:var(--gold-soft); border:1px solid var(--gold-border);
+  border-radius:12px; color:var(--gold); cursor:pointer; flex-shrink:0;
+  font-family:'DM Sans',sans-serif;
+}
+.asha-chip:active { background:var(--gold-mid); }
 </style>
 </head>
 <body>
@@ -1312,6 +1323,41 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <div id="health-tab-bills" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-chat" class="health-tab-pane" style="display:none"></div>
     </div>
+  </div>
+
+  <!-- ASHA GLOBAL AI BAR -->
+  <div id="asha-bar" style="
+    position:fixed; bottom:64px; left:0; right:0; z-index:200;
+    padding:8px 12px; background:linear-gradient(to top,var(--bg) 70%,transparent);
+  ">
+    <div style="
+      display:flex; align-items:center; gap:8px;
+      background:var(--surface); border:1px solid var(--gold-border);
+      border-radius:24px; padding:8px 14px; box-shadow:var(--shadow-gold);
+    ">
+      <div id="asha-chips" style="
+        display:flex; gap:6px; overflow-x:auto; flex:1; scrollbar-width:none;
+      "></div>
+      <textarea id="asha-input" rows="1" placeholder="Ask Asha…" style="
+        display:none; flex:1; background:transparent; border:none; outline:none;
+        color:var(--text); font-size:14px; resize:none; font-family:inherit;
+        max-height:80px;
+      "></textarea>
+      <button id="asha-mic-btn" onclick="ashaToggleMic()" style="
+        background:none; border:none; font-size:20px; cursor:pointer;
+        padding:2px; flex-shrink:0;
+      ">🎤</button>
+      <button id="asha-attach-btn" onclick="ashaAttachFile()" style="
+        background:none; border:none; font-size:18px; cursor:pointer;
+        padding:2px; flex-shrink:0;
+      ">📎</button>
+      <button id="asha-send-btn" onclick="ashaSend()" style="display:none;
+        background:var(--gold); color:#000; border:none; border-radius:16px;
+        padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer;
+      ">Send</button>
+    </div>
+    <input type="file" id="asha-file-input" accept="image/*" style="display:none"
+      onchange="ashaHandleAttachment(this)">
   </div>
 
   <!-- BOTTOM NAV (dynamic) -->
@@ -3685,6 +3731,7 @@ async function loadAndSubscribe(){
     checkNotifPermission();
     registerSW();
     checkGmailCallback();
+    updateAshaChips(); // Initialize Asha chips after data loads
   }catch(e){ console.error(e); showToast('Load error'); }
 }
 
@@ -6432,6 +6479,7 @@ function switchHealthTab(tab, btn) {
   document.querySelectorAll('.health-tab-pane').forEach(p => p.style.display = 'none');
   document.getElementById(`health-tab-${tab}`).style.display = 'block';
   renderHealthTab();
+  updateAshaChips(); // Update Asha chips for new tab
 }
 
 function renderHealthTab() {
@@ -10577,6 +10625,7 @@ window.goPage=(id,btn,subtitle)=>{
   if(id==='home') renderCalendar();
   if(id==='activities') renderTasksHub();
   if(id==='health') renderHealthProfiles();
+  updateAshaChips(); // Update Asha chips for new page
 };
 window.switchTasksHub=(view,btn)=>{
   tasksHubView=view;
@@ -11269,6 +11318,181 @@ document.addEventListener('visibilitychange',()=>{
     if(sm!=='none') LS.del('familyos_session');
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// ASHA GLOBAL AI COMPANION BAR
+// ═══════════════════════════════════════════════════════════════
+
+const ASHA_CHIPS = {
+  health_overview: [
+    { label: 'How is Papa doing?', q: 'Give me a quick status summary for {patientName}' },
+    { label: 'Urgent alerts?', q: 'Are there any urgent health alerts for {patientName}?' },
+    { label: 'Meds today?', q: 'What medications does {patientName} need to take today?' },
+    { label: 'Share update', q: 'Generate a health update I can share with family' },
+  ],
+  health_vitals: [
+    { label: 'BP trend?', q: 'How has blood pressure trended over last 30 days?' },
+    { label: 'Log vitals', q: 'I want to log vitals for {patientName}' },
+    { label: 'Normal range?', q: 'What are normal ranges for current vitals?' },
+  ],
+  health_meds: [
+    { label: 'Refills due?', q: 'Which medications need refill soon?' },
+    { label: 'Side effects?', q: 'What side effects should I watch for with current medications?' },
+    { label: 'Add medicine', q: 'Add a new medication' },
+  ],
+  health_reports: [
+    { label: 'Explain latest', q: 'Explain the most recent report in simple language' },
+    { label: 'Key findings?', q: 'What are the most important findings from recent reports?' },
+    { label: 'Audio brief', q: 'Play me an audio health brief' },
+  ],
+  health_chat: [
+    { label: 'Doctor brief', q: 'Generate a doctor visit brief for {patientName}' },
+    { label: 'Treatment progress?', q: 'How is the treatment progressing overall?' },
+    { label: 'Next steps?', q: 'What should we focus on next based on recent reports?' },
+  ],
+  finance: [
+    { label: 'Monthly spend?', q: 'How much have we spent this month?' },
+    { label: 'Medical costs?', q: 'What are our total medical expenses this month?' },
+    { label: 'Budget status?', q: 'How are we tracking against budget?' },
+    { label: 'Add expense', q: 'Add an expense' },
+  ],
+  activities: [
+    { label: "Today's tasks?", q: "What tasks are pending today?" },
+    { label: 'Upcoming reminders?', q: 'What reminders are coming up this week?' },
+    { label: 'Add reminder', q: 'Add a reminder' },
+  ],
+  home: [
+    { label: 'Family summary', q: 'Give me a summary of what needs attention across the family today' },
+    { label: 'Any urgent?', q: 'Are there any urgent items I should know about?' },
+    { label: 'Asha, hi!', q: 'Hello Asha, what can you help me with?' },
+  ],
+};
+
+function updateAshaChips() {
+  const el = document.getElementById('asha-chips');
+  if (!el) return;
+  
+  // Determine context key
+  let key = 'home';
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    key = 'health_' + (activeHealthTab || 'overview');
+  } else if (activePage === 'page-finance') key = 'finance';
+  else if (activePage === 'page-activities') key = 'activities';
+
+  const chips = ASHA_CHIPS[key] || ASHA_CHIPS.home;
+  const p = data.healthProfiles?.find(x => x.id === activeHealthProfileId);
+  const patientName = p?.name || 'patient';
+
+  el.innerHTML = chips.map(c =>
+    `<button class="asha-chip" onclick="ashaAskChip(${JSON.stringify(c.q.replace('{patientName}', patientName))})">${safeHtml(c.label)}</button>`
+  ).join('');
+}
+
+function ashaAskChip(question) {
+  // Route to active health chat if on health screen, else global Asha handler
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    // Open Netflix-style Care Chat modal
+    openCareChatModal();
+    setTimeout(() => {
+      const input = document.getElementById('care-chat-input');
+      if (input) { 
+        input.value = question; 
+        sendCareChatQuery();
+      }
+    }, 300);
+  } else {
+    ashaOpenWithQuery(question);
+  }
+}
+
+function ashaOpenWithQuery(q) {
+  const bar = document.getElementById('asha-bar');
+  const input = document.getElementById('asha-input');
+  const chips = document.getElementById('asha-chips');
+  const sendBtn = document.getElementById('asha-send-btn');
+  if (!input) return;
+  chips.style.display = 'none';
+  input.style.display = 'block';
+  sendBtn.style.display = 'block';
+  input.value = q || '';
+  input.focus();
+  bar.classList.add('typing');
+}
+
+function ashaCloseInput() {
+  const bar = document.getElementById('asha-bar');
+  const input = document.getElementById('asha-input');
+  const chips = document.getElementById('asha-chips');
+  const sendBtn = document.getElementById('asha-send-btn');
+  chips.style.display = 'flex';
+  input.style.display = 'none';
+  sendBtn.style.display = 'none';
+  bar.classList.remove('typing');
+}
+
+async function ashaSend() {
+  const input = document.getElementById('asha-input');
+  const q = input?.value?.trim();
+  if (!q) { ashaCloseInput(); return; }
+  ashaCloseInput();
+  
+  // If on health screen with active patient → route to health chat
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    openCareChatModal();
+    setTimeout(() => {
+      const chatInput = document.getElementById('care-chat-input');
+      if (chatInput) { 
+        chatInput.value = q; 
+        sendCareChatQuery();
+      }
+    }, 300);
+  } else {
+    showToast('Asha: ' + q.slice(0, 40) + '…');
+    // Future: global Asha handler for non-health screens
+  }
+}
+
+// Wire asha-input to show send button on type
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('asha-input');
+  if (input) {
+    input.addEventListener('input', () => {
+      const sendBtn = document.getElementById('asha-send-btn');
+      if (sendBtn) sendBtn.style.display = input.value.trim() ? 'block' : 'none';
+      // Auto-resize
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 80) + 'px';
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ashaSend(); }
+      if (e.key === 'Escape') ashaCloseInput();
+    });
+  }
+});
+
+// Placeholder functions for Phase 2
+function ashaToggleMic() {
+  showToast('Voice input coming in Phase 2');
+}
+
+function ashaAttachFile() {
+  showToast('File attachment coming in Phase 2');
+}
+
+function ashaHandleAttachment(input) {
+  // Phase 2 implementation
+}
+
+window.ashaAskChip = ashaAskChip;
+window.ashaSend = ashaSend;
+window.updateAshaChips = updateAshaChips;
+window.ashaToggleMic = ashaToggleMic;
+window.ashaAttachFile = ashaAttachFile;
+window.ashaHandleAttachment = ashaHandleAttachment;
+
 </script>
 </body>
 </html>
