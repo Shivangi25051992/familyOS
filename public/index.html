@@ -11408,7 +11408,10 @@ const ASHA_CHIPS = {
 
 function updateAshaChips() {
   const el = document.getElementById('asha-chips');
-  if (!el) return;
+  if (!el) {
+    console.warn('⚠️ Asha chips container not found!');
+    return;
+  }
   
   // Determine context key
   let key = 'home';
@@ -11422,9 +11425,19 @@ function updateAshaChips() {
   const p = data.healthProfiles?.find(x => x.id === activeHealthProfileId);
   const patientName = p?.name || 'patient';
 
+  console.log('🔄 Updating Asha chips:', {
+    key,
+    activePage,
+    activeHealthProfileId,
+    patientName,
+    chipCount: chips.length
+  });
+
   el.innerHTML = chips.map(c =>
     `<button class="asha-chip" onclick="ashaAskChip(${JSON.stringify(c.q.replace('{patientName}', patientName))})">${safeHtml(c.label)}</button>`
   ).join('');
+  
+  console.log('✅ Asha chips rendered:', el.children.length, 'chips');
 }
 
 function ashaAskChip(question) {
