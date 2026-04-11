@@ -11433,11 +11433,18 @@ function updateAshaChips() {
     chipCount: chips.length
   });
 
-  el.innerHTML = chips.map(c =>
-    `<button class="asha-chip" onclick="ashaAskChip(${JSON.stringify(c.q.replace('{patientName}', patientName))})">${safeHtml(c.label)}</button>`
+  // Render chips with data attributes instead of inline onclick
+  el.innerHTML = chips.map((c, i) =>
+    `<button class="asha-chip" data-chip-index="${i}">${safeHtml(c.label)}</button>`
   ).join('');
   
-  console.log('✅ Asha chips rendered:', el.children.length, 'chips');
+  // Add click listeners to each chip
+  el.querySelectorAll('.asha-chip').forEach((btn, i) => {
+    const question = chips[i].q.replace('{patientName}', patientName);
+    btn.addEventListener('click', () => ashaAskChip(question));
+  });
+  
+  console.log('✅ Asha chips rendered:', el.children.length, 'chips with click listeners');
 }
 
 function ashaAskChip(question) {
