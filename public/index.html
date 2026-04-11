@@ -1930,6 +1930,7 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
+        <button onclick="clearCareChatHistory()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:var(--text-dim);font-size:12px;padding:6px 12px;border-radius:16px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.15)';this.style.color='var(--text)'" onmouseout="this.style.background='rgba(255,255,255,0.08)';this.style.color='var(--text-dim)'" title="Clear chat history">🗑️ Clear</button>
         <span style="font-size:9px;color:var(--gold);font-weight:700;padding:4px 10px;background:rgba(201,168,76,0.15);border-radius:20px;letter-spacing:0.5px">BETA</span>
         <button onclick="closeModal('modal-care-chat-full')" style="background:none;border:none;color:var(--text-dim);font-size:28px;cursor:pointer;padding:4px;line-height:1;transition:color 0.2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-dim)'">✕</button>
       </div>
@@ -2234,7 +2235,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as fbSignOut, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential, updateProfile }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-  collection, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, deleteField,
+  collection, query, orderBy, limit, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, deleteField,
   getDocs, writeBatch, where, enableIndexedDbPersistence, collectionGroup }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
@@ -5488,6 +5489,32 @@ function loadCareChatHistory() {
     addCareChatMessage('assistant', chat.answer);
   });
 }
+
+async function clearCareChatHistory() {
+  if (!confirm('Clear all chat history for this patient? This cannot be undone.')) return;
+  
+  try {
+    const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+    const chatDocs = await getDocs(collection(db, `${base}/chatHistory`));
+    
+    const batch = writeBatch(db);
+    chatDocs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    
+    // Clear local cache
+    activePatientData.chatHistory = [];
+    
+    // Reload empty state
+    loadCareChatHistory();
+    
+    showToast('Chat history cleared ✓');
+  } catch(e) {
+    console.error('Clear chat error:', e);
+    showToast('Failed to clear chat history');
+  }
+}
+
+window.clearCareChatHistory = clearCareChatHistory;
 
 window.startCareChatVoice = function() {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
