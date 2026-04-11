@@ -6776,14 +6776,14 @@ function _renderHealthOverviewInner(el) {
         <span style="font-size:10px;color:var(--text-faint)">${formatReportDate(vitalsLatest.date)} · ${safeHtml(vitalsLatest.recordedAt||'home')}</span>
       </div>
       <div class="health-vitals-grid" style="grid-template-columns:repeat(3,1fr)">
-        ${vitalsLatest.bp_systolic ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bp_systolic))}/${safeHtml(String(vitalsLatest.bp_diastolic||'?'))}</div><div class="health-vital-chip-lbl">BP</div></div>` : ''}
-        ${vitalsLatest.pulse ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.pulse))}</div><div class="health-vital-chip-lbl">Pulse</div></div>` : ''}
-        ${vitalsLatest.spo2 ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.spo2))}%</div><div class="health-vital-chip-lbl">SpO2</div></div>` : ''}
-        ${vitalsLatest.temperature ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.temperature))}${safeHtml(vitalsLatest.temperatureUnit || '°F')}</div><div class="health-vital-chip-lbl">Temp</div></div>` : ''}
-        ${vitalsLatest.weight ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.weight))} kg</div><div class="health-vital-chip-lbl">Weight</div></div>` : ''}
-        ${vitalsLatest.bloodSugar ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bloodSugar))}</div><div class="health-vital-chip-lbl">Sugar</div></div>` : ''}
+        ${vitalsLatest.bp_systolic ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bp_systolic))}/${safeHtml(String(vitalsLatest.bp_diastolic||'?'))}</div>${generateVitalSparkline(activePatientData.vitals, 'bp_systolic')}<div class="health-vital-chip-lbl">BP</div></div>` : ''}
+        ${vitalsLatest.pulse ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.pulse))}</div>${generateVitalSparkline(activePatientData.vitals, 'pulse')}<div class="health-vital-chip-lbl">Pulse</div></div>` : ''}
+        ${vitalsLatest.spo2 ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.spo2))}%</div>${generateVitalSparkline(activePatientData.vitals, 'spo2')}<div class="health-vital-chip-lbl">SpO2</div></div>` : ''}
+        ${vitalsLatest.temperature ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.temperature))}${safeHtml(vitalsLatest.temperatureUnit || '°F')}</div>${generateVitalSparkline(activePatientData.vitals, 'temperature')}<div class="health-vital-chip-lbl">Temp</div></div>` : ''}
+        ${vitalsLatest.weight ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.weight))} kg</div>${generateVitalSparkline(activePatientData.vitals, 'weight')}<div class="health-vital-chip-lbl">Weight</div></div>` : ''}
+        ${vitalsLatest.bloodSugar ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bloodSugar))}</div>${generateVitalSparkline(activePatientData.vitals, 'bloodSugar')}<div class="health-vital-chip-lbl">Sugar</div></div>` : ''}
       </div>
-      <div style="font-size:10px;color:var(--text-faint);margin-top:6px">Latest values across recent readings</div>
+      <div style="font-size:10px;color:var(--text-faint);margin-top:6px">Latest values with 10-day trend · Tap to see full history</div>
     </div>` : '';
 
   // Slim stats + timeline
@@ -7273,6 +7273,35 @@ function getVitalSeries(vitals, key){
     if(!isNaN(num)) vals.push(num);
   }
   return vals;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 6: VITALS TREND SPARKLINES (Pure SVG)
+// ═══════════════════════════════════════════════════════════════
+
+function generateVitalSparkline(vitals, key, width = 50, height = 20) {
+  const series = getVitalSeries(vitals, key).slice(0, 10).reverse(); // Last 10 readings
+  if (series.length < 2) return '';
+
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const range = max - min || 1;
+
+  const points = series.map((val, i) => {
+    const x = (i / (series.length - 1)) * width;
+    const y = height - ((val - min) / range) * height;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  // Determine trend color
+  const first = series[0];
+  const last = series[series.length - 1];
+  const trend = last > first ? 'up' : last < first ? 'down' : 'stable';
+  const color = trend === 'down' ? 'var(--green)' : trend === 'up' ? 'var(--red)' : 'var(--gold)';
+
+  return `<svg width="${width}" height="${height}" style="display:block;margin:4px auto 0 auto">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+  </svg>`;
 }
 
 function buildStandardRangesHtml(){
