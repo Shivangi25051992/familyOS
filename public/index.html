@@ -6669,9 +6669,15 @@ function _renderHealthOverviewInner(el) {
       <div class="health-collapsible-body" id="health-summary-body">
         <div style="font-size:13px;line-height:1.6;color:var(--text-dim);padding-top:10px" id="health-ai-summary-text">${formatChatResponse(summary || 'No summary yet.')}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:10px;color:var(--text-faint)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:10px;color:var(--text-faint);flex-wrap:wrap;gap:8px">
         <span>${summaryUpdatedLabel}${summaryStale ? ' · needs update' : ''}</span>
-        <button class="btn-sm" onclick="generateAISummary()"><span id="ai-sum-btn-icon">🔄</span> Update summary</button>
+        <div style="display:flex;gap:8px">
+          <button id="btn-audio-brief" class="btn-sm" onclick="playHealthBrief()" 
+            style="background:var(--purple-soft);border:1px solid rgba(123,94,167,0.3);color:var(--purple)">
+            ▶ Play Brief
+          </button>
+          <button class="btn-sm" onclick="generateAISummary()"><span id="ai-sum-btn-icon">🔄</span> Update</button>
+        </div>
       </div>
     </div>`;
 
@@ -11654,6 +11660,86 @@ window.updateAshaChips = updateAshaChips;
 window.ashaToggleMic = ashaToggleMic;
 window.ashaAttachFile = ashaAttachFile;
 window.ashaHandleAttachment = ashaHandleAttachment;
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 3: AUDIO HEALTH BRIEF (World-First Feature)
+// ═══════════════════════════════════════════════════════════════
+
+let _audioBriefPlaying = false;
+let _audioBriefUtterance = null;
+
+async function playHealthBrief() {
+  if (!activeHealthProfileId) return;
+  if (_audioBriefPlaying) { stopHealthBrief(); return; }
+
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return;
+
+  const btn = document.getElementById('btn-audio-brief');
+  if (btn) { btn.textContent = '⏳ Generating…'; btn.disabled = true; }
+
+  try {
+    // Build a rich context for the brief
+    const vitalsLatest = getLatestVitalSnapshot(activePatientData.vitals || []);
+    const markers = getKeyMarkers(activePatientData.reports, p.trackedMarkers).slice(0, 4);
+    const meds = (activePatientData.medications || []).filter(m => m.active !== false).slice(0, 4);
+    const todayDoses = activePatientData.doseLogs || [];
+
+    const context = `
+Patient: ${p.name}, ${p.relation}. Diagnosis: ${p.diagnosis}.
+Latest vitals: ${vitalsLatest ? `BP ${vitalsLatest.bp_systolic||'—'}/${vitalsLatest.bp_diastolic||'—'}, Pulse ${vitalsLatest.pulse||'—'}, SpO2 ${vitalsLatest.spo2||'—'}%` : 'no recent vitals'}.
+Key markers: ${markers.map(m => `${m.name} ${m.value} (${m.trend === 'down' ? 'improving' : m.trend === 'up' ? 'elevated' : 'stable'})`).join(', ') || 'none tracked'}.
+Active medications: ${meds.map(m => m.name).join(', ') || 'none'}.
+Doses taken today: ${todayDoses.length} of expected doses.
+Care summary: ${(p.aiSummary || 'not yet generated').slice(0, 200)}.
+    `.trim();
+
+    const prompt = `Create a warm, clear 45-second spoken health brief for a family caregiver. 
+Speak directly to them as "you". Start with the most important thing. 
+Include: overall status, one key marker trend, today's medication status, one thing to watch.
+End with an encouraging sentence. Keep it under 100 words. Plain sentences, no bullet points, no markdown.
+Context: ${context}`;
+
+    const script = await callClaudeHealth(prompt, context, true, LLM_MODELS.medicalQA, 200);
+
+    if (btn) { btn.textContent = '⏸ Stop'; btn.disabled = false; }
+    _audioBriefPlaying = true;
+
+    const synth = window.speechSynthesis;
+    _audioBriefUtterance = new SpeechSynthesisUtterance(script);
+    _audioBriefUtterance.lang = 'en-IN';
+    _audioBriefUtterance.rate = 0.9;
+    _audioBriefUtterance.pitch = 1.0;
+    
+    // Prefer a natural voice if available
+    const voices = synth.getVoices();
+    const preferred = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+      || voices.find(v => v.lang.startsWith('en'));
+    if (preferred) _audioBriefUtterance.voice = preferred;
+
+    _audioBriefUtterance.onend = () => {
+      _audioBriefPlaying = false;
+      if (btn) btn.textContent = '▶ Play Brief';
+    };
+    
+    synth.speak(_audioBriefUtterance);
+
+  } catch(e) {
+    console.error('Audio brief error:', e);
+    if (btn) { btn.textContent = '▶ Play Brief'; btn.disabled = false; }
+    showToast('Could not generate brief — check connection');
+  }
+}
+
+function stopHealthBrief() {
+  window.speechSynthesis?.cancel();
+  _audioBriefPlaying = false;
+  const btn = document.getElementById('btn-audio-brief');
+  if (btn) btn.textContent = '▶ Play Brief';
+}
+
+window.playHealthBrief = playHealthBrief;
+window.stopHealthBrief = stopHealthBrief;
 
 </script>
 </body>
