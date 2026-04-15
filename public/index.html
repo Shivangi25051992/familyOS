@@ -7825,47 +7825,24 @@ async function askHealthAI(profileId, question) {
 }
 
 async function callClaudeHealth(prompt, context, isCompassionatePersona = false, model = LLM_MODELS.medicalQA, maxTokens = 1000) {
-  const apiKey = window.FAMILYOS_OCR_CONFIG?.anthropicKey;
-  if(!apiKey) {
-    showToast('Anthropic API key is missing in config.js');
-    throw new Error('Claude API key missing');
-  }
-
-  const systemPrompt = isCompassionatePersona 
-    ? `You are Asha, a compassionate medical information companion helping an Indian family caregiver understand their family member's condition. Always answer the user's question directly first, then add a brief context section grounded in the patient's records. Use simple language, avoid jargon, and be honest about uncertainty. Always recommend consulting the treating doctor for any treatment decisions. Answer in the same language the question is asked (Hindi or English). Use only the provided patient records; if data is missing, say so.
-Formatting rules:
-- Use short headings when helpful (e.g., "Answer", "Based on latest records")
-- Prefer bullet points over long paragraphs
-- Keep responses concise for direct questions (2-5 bullets)
-- Reference the most recent report date or vitals date when relevant`
-    : `You are a medical data summarizer. Be concise, clear, and compassionate.`;
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: model,
-      max_tokens: maxTokens,
-      system: systemPrompt + `\n\nContext:\n${context}`,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json();
-    console.error('Claude API error:', err);
-    const errMsg = `API error ${response.status}: ${err.error?.message || 'Unknown'}`;
+  // PHASE 12: Using Cloud Functions for secure API calls
+  try {
+    const healthAIRaw = httpsCallable(functions, 'healthAIRaw');
+    const result = await healthAIRaw({
+      fid: FID,
+      prompt,
+      context,
+      isCompassionatePersona,
+      model
+    });
+    return result.data.text;
+  } catch (error) {
+    console.error('Health AI error:', error);
+    const errMsg = error.message || 'AI request failed';
     AppMonitor.logFailure('claude_health', errMsg, { message: errMsg });
-    throw new Error(errMsg);
+    showToast('AI error: ' + errMsg);
+    throw error;
   }
-
-  const resData = await response.json();
-  return resData.content[0].text;
 }
 
 // ══ HEALTH HELPERS ══
@@ -9513,53 +9490,25 @@ async function confirmSaveReport() {
   finally { isSavingReport = false; }
 }
 
-// Reuse existing receipt vision logic but specialized
+// PHASE 12: Using Cloud Functions for secure image analysis
 async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODELS.medicalReports) {
-  const apiKey = window.FAMILYOS_OCR_CONFIG?.anthropicKey;
-  if(!apiKey) {
-    showToast('Anthropic API key is missing in config.js');
-    throw new Error('Claude API key missing');
-  }
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: model,
-      max_tokens: 2000,
+  try {
+    const healthAnalyzeImageRaw = httpsCallable(functions, 'healthAnalyzeImageRaw');
+    const result = await healthAnalyzeImageRaw({
+      fid: FID,
       system,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/jpeg',
-              data: base64NoPrefix
-            }
-          },
-          {
-            type: 'text',
-            text: prompt
-          }
-        ]
-      }]
-    })
-  });
-  if (!response.ok) {
-    const err = await response.json();
-    console.error('Claude API error:', err);
-    const errMsg = `API error ${response.status}: ${err.error?.message || 'Unknown'}`;
+      prompt,
+      base64NoPrefix,
+      model
+    });
+    return result.data.text;
+  } catch (error) {
+    console.error('Health image analysis error:', error);
+    const errMsg = error.message || 'Image analysis failed';
     AppMonitor.logFailure('claude_vision', errMsg, { message: errMsg });
-    throw new Error(errMsg);
+    showToast('AI error: ' + errMsg);
+    throw error;
   }
-  const data = await response.json();
-  return data.content[0].text;
 }
 
 async function saveMedication() {
