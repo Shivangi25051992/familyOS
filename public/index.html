@@ -10,6 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="FamilyOS">
 <title>FamilyOS</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root {
   --bg:#07070A; --surface:#13131A; --card:#1A1A24;
@@ -221,7 +223,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .tg-blue{background:var(--blue-soft);color:var(--blue)}
 .tg-purple{background:var(--purple-soft);color:var(--purple)}
 .tg-orange{background:var(--orange-soft);color:var(--orange)}
+.tg-pink{background:rgba(236,72,153,0.12);color:rgb(236,72,153)}
+.tg-gray{background:var(--text-ghost);color:var(--text-dim)}
 .tg-dim{background:var(--text-ghost);color:var(--text-dim)}
+
+/* ── SYMPTOM DIARY ── */
+.severity-btn{width:50px;height:50px;border-radius:50%;border:2px solid var(--gold-border);background:var(--card);color:var(--text-dim);font-size:16px;font-weight:700;cursor:pointer;transition:all 0.2s}
+.severity-btn:hover{border-color:var(--gold);transform:scale(1.05)}
+.severity-btn.selected{border-color:var(--gold);background:var(--gold);color:var(--bg);transform:scale(1.1)}
+.severity-btn[data-severity="1"].selected{background:var(--green);border-color:var(--green)}
+.severity-btn[data-severity="2"].selected{background:#93c5fd;border-color:#93c5fd}
+.severity-btn[data-severity="3"].selected{background:var(--gold);border-color:var(--gold)}
+.severity-btn[data-severity="4"].selected{background:var(--orange);border-color:var(--orange)}
+.severity-btn[data-severity="5"].selected{background:var(--red);border-color:var(--red)}
 
 /* ── PROGRESS ── */
 .prog-wrap{background:var(--surface);border-radius:4px;height:4px;overflow:hidden;margin:10px 0}
@@ -523,6 +537,17 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   background: var(--green-soft);
 }
 .login-state { animation: fadeIn 0.2s ease; }
+
+/* ── ASHA GLOBAL AI BAR ── */
+#asha-bar { transition: bottom 0.2s ease; }
+#asha-bar.typing { bottom: 0; }
+.asha-chip {
+  white-space:nowrap; font-size:11px; padding:5px 10px;
+  background:var(--gold-soft); border:1px solid var(--gold-border);
+  border-radius:12px; color:var(--gold); cursor:pointer; flex-shrink:0;
+  font-family:'DM Sans',sans-serif;
+}
+.asha-chip:active { background:var(--gold-mid); }
 </style>
 </head>
 <body>
@@ -1096,7 +1121,7 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
         </div>
         <div class="settings-item-right">›</div>
       </div>
-      <div class="settings-item" onclick="openInviteModal()">
+      <div class="settings-item" onclick="showToast('Family invites coming soon — feature under review')">
         <div class="settings-item-left">
           <div class="settings-item-icon">➕</div>
           <div><div class="settings-item-label">Invite Member</div><div class="settings-item-sub">Share invite code</div></div>
@@ -1242,15 +1267,22 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     </div>
 
     <div id="health-patient-view" style="display:none">
-      <div class="sec-hdr">
-        <button class="btn-ghost" onclick="showHealthProfiles()" style="padding:0;margin-right:12px;font-size:20px">←</button>
-        <div style="flex:1">
-          <div class="sec-title" id="health-patient-name">Patient Name</div>
-          <div style="font-size:12px;color:var(--text-dim)" id="health-patient-diagnosis">Diagnosis</div>
+      <!-- Sticky Header Container -->
+      <div style="position:sticky;top:0;z-index:100;background:var(--bg);padding-bottom:8px">
+        <!-- Compact Patient Header -->
+        <div style="display:flex;align-items:center;padding:12px 16px 8px 16px;gap:12px">
+          <button class="btn-ghost" onclick="showHealthProfiles()" style="padding:4px;font-size:20px;line-height:1">←</button>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:16px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="health-patient-name">Patient Name</div>
+            <div style="font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="health-patient-diagnosis">Diagnosis</div>
+          </div>
+          <button class="btn-sm" id="health-patient-share-btn" onclick="openShareHealthModal()" style="display:none;padding:6px 12px;font-size:12px">🔗</button>
+          <button class="edit-btn" id="health-patient-delete-btn" onclick="deleteHealthProfile()" style="display:none;font-size:18px;padding:4px">✕</button>
         </div>
         <button class="btn-sm" id="health-patient-share-btn" onclick="openShareHealthModal()" style="display:none;margin-right:8px">🔗 Share</button>
         <button class="edit-btn" id="health-patient-delete-btn" onclick="deleteHealthProfile()" style="display:none;font-size:16px">✕</button>
       </div>
+      
       <div class="chip-row" id="health-tabs" style="overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none">
         <button class="chip on" onclick="switchHealthTab('overview',this)" style="white-space:nowrap">Overview</button>
         <button class="chip" onclick="switchHealthTab('vitals',this)" style="white-space:nowrap">Vitals</button>
@@ -1269,6 +1301,41 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <div id="health-tab-bills" class="health-tab-pane" style="display:none"></div>
       <div id="health-tab-chat" class="health-tab-pane" style="display:none"></div>
     </div>
+  </div>
+
+  <!-- ASHA GLOBAL AI BAR -->
+  <div id="asha-bar" style="
+    position:fixed; bottom:64px; left:0; right:0; z-index:200;
+    padding:8px 12px; background:linear-gradient(to top,var(--bg) 70%,transparent);
+  ">
+    <div style="
+      display:flex; align-items:center; gap:8px;
+      background:var(--surface); border:1px solid var(--gold-border);
+      border-radius:24px; padding:8px 14px; box-shadow:var(--shadow-gold);
+    ">
+      <div id="asha-chips" style="
+        display:flex; gap:6px; overflow-x:auto; flex:1; scrollbar-width:none;
+      "></div>
+      <textarea id="asha-input" rows="1" placeholder="Ask Asha…" style="
+        display:none; flex:1; background:transparent; border:none; outline:none;
+        color:var(--text); font-size:14px; resize:none; font-family:inherit;
+        max-height:80px;
+      "></textarea>
+      <button id="asha-mic-btn" onclick="ashaToggleMic()" style="
+        background:none; border:none; font-size:20px; cursor:pointer;
+        padding:2px; flex-shrink:0;
+      ">🎤</button>
+      <button id="asha-attach-btn" onclick="ashaAttachFile()" style="
+        background:none; border:none; font-size:18px; cursor:pointer;
+        padding:2px; flex-shrink:0;
+      ">📎</button>
+      <button id="asha-send-btn" onclick="ashaSend()" style="display:none;
+        background:var(--gold); color:#000; border:none; border-radius:16px;
+        padding:6px 14px; font-size:12px; font-weight:700; cursor:pointer;
+      ">Send</button>
+    </div>
+    <input type="file" id="asha-file-input" accept="image/*" style="display:none"
+      onchange="ashaHandleAttachment(this)">
   </div>
 
   <!-- BOTTOM NAV (dynamic) -->
@@ -1654,29 +1721,32 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 <div class="modal-overlay" id="modal-add-patient">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-title">Add Health Profile <button class="modal-close" onclick="closeModal('modal-add-patient')">✕</button></div>
-    <div class="form-group"><label class="form-label">Name (e.g. Papa, Mummy, Self)</label><input class="form-input" id="hp-name" placeholder="Name"></div>
+    <div class="modal-title">Add Patient <button class="modal-close" onclick="closeModal('modal-add-patient')">✕</button></div>
+    <div class="form-group"><label class="form-label">Name (e.g. Dad, Mom, Me)</label><input class="form-input" id="hp-name" placeholder="Name"></div>
     <div class="form-group"><label class="form-label">Relation</label>
-      <select class="form-select" id="hp-relation"><option>Father</option><option>Mother</option><option>Spouse</option><option>Child</option><option>Self</option><option>Other</option></select></div>
+      <select class="form-select" id="hp-relation"><option>Self</option><option>Father</option><option>Mother</option><option>Spouse</option><option>Child</option><option>Other</option></select></div>
     <div class="form-group"><label class="form-label">Condition Type</label>
       <select class="form-select" id="hp-conditionType">
-        <option value="Cancer">Cancer</option>
-        <option value="Diabetes">Diabetes</option>
-        <option value="Hypertension">Hypertension</option>
-        <option value="Thyroid Disorder">Thyroid Disorder</option>
-        <option value="Heart Disease">Heart Disease</option>
-        <option value="Kidney Disease">Kidney Disease</option>
-        <option value="Obesity / Fatty Liver">Obesity / Fatty Liver</option>
-        <option value="PCOS/PCOD">PCOS/PCOD</option>
-        <option value="Asthma / COPD">Asthma / COPD</option>
-        <option value="Arthritis">Arthritis</option>
-        <option value="Fitness &amp; Wellness">Fitness &amp; Wellness</option>
-        <option value="Post-Surgery Recovery">Post-Surgery Recovery</option>
-        <option value="Mental Health">Mental Health</option>
-        <option value="Pregnancy">Pregnancy</option>
-        <option value="Other / General">Other / General</option>
-      </select></div>
-    <div class="form-group"><label class="form-label">Diagnosis / Details</label><input class="form-input" id="hp-diagnosis" placeholder="e.g. Liver Cancer Stage 3, Type 2 Diabetes, Hypertension"></div>
+        <option value="">Select condition...</option>
+        <option value="Cancer">🎗️ Cancer</option>
+        <option value="Diabetes">🩸 Diabetes</option>
+        <option value="Hypertension">❤️ Hypertension</option>
+        <option value="Thyroid">🦋 Thyroid</option>
+        <option value="Heart Disease">💔 Heart Disease</option>
+        <option value="Kidney Disease">🫘 Kidney Disease</option>
+        <option value="Obesity/Fatty Liver">⚖️ Obesity/Fatty Liver</option>
+        <option value="PCOS/PCOD">👩 PCOS/PCOD</option>
+        <option value="Asthma/COPD">🫁 Asthma/COPD</option>
+        <option value="Arthritis">🦴 Arthritis</option>
+        <option value="Fitness & Wellness">💪 Fitness & Wellness</option>
+        <option value="Post-Surgery Recovery">🏥 Post-Surgery Recovery</option>
+        <option value="Mental Health">🧠 Mental Health</option>
+        <option value="Pregnancy">🤰 Pregnancy</option>
+        <option value="Other">📋 Other</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Helps customize vitals tracking and insights</div>
+    </div>
+    <div class="form-group"><label class="form-label">Diagnosis</label><input class="form-input" id="hp-diagnosis" placeholder="e.g. Stage 4 Lung Cancer"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-group"><label class="form-label">Diagnosed On</label><input class="form-input" id="hp-diagnosedOn" type="date"></div>
       <div class="form-group"><label class="form-label">Blood Group</label><input class="form-input" id="hp-bloodGroup" placeholder="e.g. O+"></div>
@@ -1820,12 +1890,129 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-edit-report-date">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📅 Edit Report Date <button class="modal-close" onclick="closeModal('modal-edit-report-date')">✕</button></div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+        Correct the date if AI misread handwritten notes or the date is incorrect.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Report Date</label>
+        <input type="date" id="edit-report-date-input" class="form-input" style="font-size:14px">
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">
+          Current date will be pre-filled. Update if incorrect.
+        </div>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="saveReportDate()" style="width:100%">Save Date</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-doctor-summary">
+  <div class="modal" style="max-width:600px;max-height:90vh;overflow-y:auto">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 Doctor Summary <button class="modal-close" onclick="closeModal('modal-doctor-summary')">✕</button></div>
+    <div id="doctor-summary-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-symptom-diary">
+  <div class="modal" style="max-width:450px">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🩺 Log Symptom <button class="modal-close" onclick="closeModal('modal-symptom-diary')">✕</button></div>
+    <div class="form-group">
+      <label class="form-label">Symptom</label>
+      <input class="form-input" id="symptom-name" placeholder="e.g. Headache, Nausea, Fatigue" style="font-size:14px">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Severity (1 = Mild, 5 = Severe)</label>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="severity-btn" data-severity="1" onclick="selectSeverity(1)">1</button>
+        <button class="severity-btn" data-severity="2" onclick="selectSeverity(2)">2</button>
+        <button class="severity-btn" data-severity="3" onclick="selectSeverity(3)">3</button>
+        <button class="severity-btn" data-severity="4" onclick="selectSeverity(4)">4</button>
+        <button class="severity-btn" data-severity="5" onclick="selectSeverity(5)">5</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-faint);margin-top:6px;text-align:center">
+        <span id="severity-label">Select severity level</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (optional)</label>
+      <textarea class="form-input" id="symptom-notes" placeholder="Any additional details..." rows="3" style="resize:vertical"></textarea>
+    </div>
+    <button class="btn-primary" onclick="saveSymptom()" style="width:100%">Log Symptom</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-care-chat-full" style="background:linear-gradient(180deg, rgba(19,19,26,1) 0%, rgba(7,7,10,1) 100%);backdrop-filter:blur(20px)">
+  <div class="modal" style="max-width:100%;height:100vh;margin:0;border-radius:0;padding:0;background:transparent">
+    <!-- Header -->
+    <div style="padding:20px 20px 16px 20px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:22px;font-weight:700;color:var(--text);letter-spacing:-0.5px">Care Chat</div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:2px;font-weight:400">
+          AI-powered health insights
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button onclick="clearCareChatHistory()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:var(--text-dim);font-size:12px;padding:6px 12px;border-radius:16px;cursor:pointer;transition:all 0.2s" onmouseover="this.style.background='rgba(255,255,255,0.15)';this.style.color='var(--text)'" onmouseout="this.style.background='rgba(255,255,255,0.08)';this.style.color='var(--text-dim)'" title="Clear chat history">🗑️ Clear</button>
+        <span style="font-size:9px;color:var(--gold);font-weight:700;padding:4px 10px;background:rgba(201,168,76,0.15);border-radius:20px;letter-spacing:0.5px">BETA</span>
+        <button onclick="closeModal('modal-care-chat-full')" style="background:none;border:none;color:var(--text-dim);font-size:28px;cursor:pointer;padding:4px;line-height:1;transition:color 0.2s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-dim)'">✕</button>
+      </div>
+    </div>
+
+    <!-- Quick suggestions -->
+    <div style="padding:0 20px 20px 20px">
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;font-weight:500">
+        Quick questions:
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px" id="care-chat-suggestions">
+        <!-- Dynamic chips will be inserted here -->
+      </div>
+    </div>
+
+    <!-- Main input -->
+    <div style="padding:0 20px 20px 20px">
+      <div style="position:relative">
+        <input 
+          type="text" 
+          id="care-chat-input"
+          placeholder="What would you like to know about their care?"
+          style="width:100%;padding:18px 56px 18px 20px;font-size:16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);border-radius:30px;color:var(--text);font-weight:400;transition:all 0.2s"
+          onkeypress="if(event.key==='Enter') sendCareChatQuery()"
+          onfocus="this.style.background='rgba(255,255,255,0.12)';this.style.borderColor='rgba(201,168,76,0.4)'"
+          onblur="this.style.background='rgba(255,255,255,0.08)';this.style.borderColor='rgba(255,255,255,0.12)'"
+        >
+        <button 
+          onclick="startCareChatVoice()"
+          style="position:absolute;right:16px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-dim);transition:color 0.2s;padding:8px"
+          title="Voice input"
+          onmouseover="this.style.color='var(--gold)'"
+          onmouseout="this.style.color='var(--text-dim)'"
+        >
+          🎤
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat history -->
+    <div id="care-chat-history" style="padding:0 20px 20px 20px;max-height:calc(100vh - 280px);overflow-y:auto">
+      <!-- Previous conversations will appear here -->
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-health-report">
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">Add Report <button class="modal-close" onclick="cancelPendingReport()">✕</button></div>
+    <input type="file" id="health-report-input" accept="image/*,application/pdf" multiple style="display:none" onchange="handleHealthReport(this)">
     <div id="health-report-preview" style="display:none">
        <div id="health-report-analysis" style="margin-bottom:15px"></div>
+       <button class="btn-primary" onclick="addAnotherReportPage()" style="margin-bottom:8px">+ Add Another Page</button>
        <button class="btn-primary" onclick="confirmSaveReport()">Save Report</button>
        <button class="btn-primary muted" onclick="cancelPendingReport()" style="margin-top:8px">Cancel</button>
     </div>
@@ -1835,7 +2022,6 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
         <div style="font-size:14px;font-weight:600">Snap or Upload Report</div>
         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Image or PDF</div>
       </div>
-      <input type="file" id="health-report-input" accept="image/*,application/pdf" style="display:none" onchange="handleHealthReport(this)">
     </div>
   </div>
 </div>
@@ -1854,6 +2040,22 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
     <div class="modal-handle"></div>
     <div class="modal-title">All Key Markers <button class="modal-close" onclick="closeModal('modal-health-markers-view')">✕</button></div>
     <div id="health-marker-view-list"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-trend-charts">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📈 Trend Charts <button class="modal-close" onclick="closeModal('modal-trend-charts')">✕</button></div>
+    <div id="trend-charts-content"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-treatment-timeline">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏥 Treatment Timeline <button class="modal-close" onclick="closeModal('modal-treatment-timeline')">✕</button></div>
+    <div id="treatment-timeline-content"></div>
   </div>
 </div>
 
@@ -1920,9 +2122,11 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">Add Health Bill <button class="modal-close" onclick="closeModal('modal-health-bill')">✕</button></div>
-    <div style="text-align:center;padding:20px 0;margin-bottom:15px">
-       <button class="btn-primary" onclick="document.getElementById('hb-photo').click()">📷 Photograph Bill</button>
-       <input type="file" id="hb-photo" accept="image/*" capture="environment" style="display:none" onchange="handleHealthBillPhoto(this)">
+    <div style="text-align:center;padding:20px 0;margin-bottom:15px;display:flex;gap:10px;justify-content:center">
+       <button class="btn-primary" onclick="document.getElementById('hb-photo-camera').click()">📷 Take Photo</button>
+       <button class="btn-secondary" onclick="document.getElementById('hb-photo-gallery').click()">🖼️ Select Image</button>
+       <input type="file" id="hb-photo-camera" accept="image/*" capture="environment" style="display:none" onchange="handleHealthBillPhoto(this)">
+       <input type="file" id="hb-photo-gallery" accept="image/*" style="display:none" onchange="handleHealthBillPhoto(this)">
     </div>
     <div id="hb-preview" style="display:none">
        <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="hb-date" type="date"></div>
@@ -2028,11 +2232,40 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 <script>if(typeof window.FAMILYOS_OCR_CONFIG==='undefined')window.FAMILYOS_OCR_CONFIG={provider:"openai",openaiKey:"",anthropicKey:""};if(typeof window.FAMILYOS_GMAIL_CLIENT_ID==='undefined')window.FAMILYOS_GMAIL_CLIENT_ID="";</script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
+/*
+  ═══════════════════════════════════════════════════════════════════════════
+  DEPLOY CHECKLIST — run ALL commands after every security-related change:
+  ═══════════════════════════════════════════════════════════════════════════
+  
+  1. firebase deploy --only firestore:rules  (deploys security rules)
+  2. firebase deploy --only functions        (deploys Cloud Functions)
+  3. firebase deploy --only hosting          (deploys index.html)
+  
+  NEVER deploy hosting without also deploying updated rules and functions.
+  Rules, functions, and app code must stay in sync.
+  
+  To verify rules are active:
+  Firebase Console → Firestore → Rules → check "Last updated" timestamp
+  
+  To test rules without deploying:
+  firebase emulators:start --only firestore
+  
+  SECURITY FIXES IMPLEMENTED:
+  - ✅ Enhanced signOut() to clear ALL global state (prevents data leakage)
+  - ✅ Added memberUids flat array to family documents (for efficient rules)
+  - ✅ Updated Firestore rules to use memberUids (stricter membership checks)
+  - ✅ Added rate limiting to invite generation (max 3 active per family)
+  - ✅ Added owner-only check for invite creation
+  - ✅ Added security checks in loadAndSubscribe() (blocks non-members)
+  - ✅ Clear FID/myRole when user has no family (prevents cached family load)
+  ═══════════════════════════════════════════════════════════════════════════
+*/
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as fbSignOut, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential, updateProfile }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
-  collection, query, orderBy, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, deleteField,
+  collection, query, orderBy, limit, onSnapshot, serverTimestamp, arrayUnion, arrayRemove, deleteField,
   getDocs, writeBatch, where, enableIndexedDbPersistence, collectionGroup }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
@@ -2646,11 +2879,68 @@ window.signInWithGoogle = async function() {
   }
 };
 window.doSignOut=async()=>{
-  unsubs.forEach(u=>u());
-  LS.del('familyos_pin'); LS.del('familyos_security');
+  console.log('\n🚪 SIGNING OUT');
+  console.log('═══════════════════════════════════════════════════');
+  
+  // Step 1: Unsubscribe ALL Firestore listeners immediately
+  console.log('🔄 Unsubscribing from Firestore listeners...');
+  if (typeof unsubs !== 'undefined' && unsubs.length > 0) {
+    unsubs.forEach(u => { try { u(); } catch(e) { console.warn('Unsub error:', e); } });
+    unsubs = [];
+  }
+  if (typeof activePatientUnsubs !== 'undefined' && activePatientUnsubs.length > 0) {
+    activePatientUnsubs.forEach(u => { try { u(); } catch(e) { console.warn('Unsub error:', e); } });
+    activePatientUnsubs = [];
+  }
+  console.log('✅ Unsubscribed from all listeners');
+  
+  // Step 2: Wipe ALL global state to prevent data leakage
+  console.log('🧹 Clearing all global state...');
+  CU = null;
+  FID = null;
+  FD = null;
+  myRole = null;
+  myPerms = null;
+  myName = 'Me';
+  partnerName = 'Partner';
+  activeHealthProfileId = null;
+  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [] };
+  data = { 
+    expenses: [], 
+    tasks: [], 
+    reminders: [], 
+    kidEvents: [],
+    autoExpenses: [], 
+    healthProfiles: [],
+    sharedHealthProfiles: [],
+    members: []
+  };
+  console.log('✅ All global state cleared');
+  
+  // Step 3: Clear session storage (NOT localStorage - keep theme preference)
+  console.log('🧹 Clearing session storage...');
+  sessionStorage.clear();
+  
+  // Step 4: Clear security and session from localStorage
+  console.log('🧹 Clearing security settings...');
+  LS.del('familyos_pin');
+  LS.del('familyos_security');
   LS.del('familyos_session');
+  LS.del('pending_invite');
+  
+  // Step 5: Sign out from Firebase
+  console.log('🔄 Signing out from Firebase Auth...');
   await fbSignOut(auth);
+  console.log('✅ Signed out from Firebase');
+  
+  // Step 6: Close any open modals
   closeModal('modal-user');
+  
+  console.log('═══════════════════════════════════════════════════');
+  console.log('✅ SIGN OUT COMPLETE - State fully reset');
+  console.log('═══════════════════════════════════════════════════\n');
+  
+  // Step 7: Reload page to ensure clean state
   location.reload();
 };
 
@@ -2919,6 +3209,11 @@ onAuthStateChanged(auth,async user=>{
         console.log('💡 User needs to either:');
         console.log('   1. Create a new family (setup screen)');
         console.log('   2. Join with invite code (join screen)');
+        
+        // CRITICAL: Clear any cached FID to prevent loading wrong family
+        FID = null;
+        myRole = null;
+        console.log('🧹 Cleared FID and myRole to prevent loading cached family');
         
         // Log to AppMonitor
         AppMonitor.capture('auth_needs_setup', 'User needs setup or invite', {
@@ -3330,6 +3625,11 @@ window.finishSetup=async()=>{
   try{
     const fRef=doc(collection(db,'families'));
     FID=fRef.id; myRole='primary';
+    
+    console.log('🏗️ Creating new family...');
+    console.log('Family ID:', FID);
+    console.log('Owner UID:', CU.uid);
+    
     await setDoc(fRef,{
       name:setupData.familyName,
       modules:[...activeModules],
@@ -3339,19 +3639,24 @@ window.finishSetup=async()=>{
       loanPaid:0,
       savingsGoal:setupData.config.savings||0,
       members:[CU.uid],
+      memberUids:[CU.uid], // SECURITY: Flat array for Firestore rules
       primaryOwner:CU.uid,
       memberProfiles:{[CU.uid]:{name:setupData.userName||CU.displayName||CU.phoneNumber,email:CU.email||null,phoneNumber:CU.phoneNumber||null,role:'primary',emoji:'👑',uid:CU.uid}},
       createdAt:serverTimestamp()
     });
+    console.log('✅ Family document created');
     await setDoc(doc(db,'users',CU.uid),{
+      uid:CU.uid, // SECURITY: Always include uid in document
       familyId:FID,
       role:'primary',
       name:setupData.userName||CU.displayName||CU.phoneNumber||CU.email||'User',
       email:CU.email||null,
       phoneNumber:CU.phoneNumber||null,
       provider:CU.providerData[0]?.providerId||'unknown',
-      createdAt:serverTimestamp()
+      createdAt:serverTimestamp(),
+      lastLoginAt:serverTimestamp()
     });
+    console.log('✅ User document created');
     LS.set('familyos_family_name',setupData.familyName);
     await loadAndSubscribe();
   }catch(e){ btn.disabled=false; btn.textContent='Launch FamilyOS →'; showToast('Error: '+e.message); }
@@ -3433,6 +3738,7 @@ async function loadAndSubscribe(){
     checkNotifPermission();
     registerSW();
     checkGmailCallback();
+    updateAshaChips(); // Initialize Asha chips after data loads
   }catch(e){ console.error(e); showToast('Load error'); }
 }
 
@@ -3989,6 +4295,8 @@ function rescheduleAllAlarms(){
 
 // ══ JOIN ══
 window.joinWithCode=async()=>{
+  showToast('Joining via invite is temporarily disabled');
+  return;
   console.log('\n═══════════════════════════════════════════════════');
   console.log('🎫 JOINING WITH INVITE CODE');
   console.log('═══════════════════════════════════════════════════');
@@ -4049,17 +4357,41 @@ window.joinWithCode=async()=>{
 
 // ══ INVITE ══
 window.openInviteModal=async()=>{
+  showToast('Family invites coming soon — feature under review');
+  return;
   if(!FID||!CU||!functions){ showToast('Please wait — loading...'); return; }
   if(!FD){ showToast('Loading family...'); return; }
+  
+  // SECURITY: Only primary owner can create invites
+  if(FD.primaryOwner !== CU.uid) {
+    showToast('Only the family owner can create invites');
+    return;
+  }
+  
   if(Object.keys(FD.memberProfiles||{}).length>=5){ showToast('Max 5 members reached'); return; }
+  
   try{
+    console.log('🎫 Creating/fetching invite...');
     const fn=httpsCallable(functions,'createInvite');
     const res=await fn({fid:FID});
     const code=res?.data?.code;
     if(!code){ showToast('Could not create invite'); return; }
+    
     document.getElementById('invite-code-display').textContent=code;
+    
+    // Show message if using existing invite
+    if(res?.data?.isExisting) {
+      console.log('ℹ️ Using existing invite (rate limited)');
+      showToast('Using existing invite code (max 3 active at once)');
+    } else {
+      console.log('✅ New invite created:', code);
+    }
+    
     openModal('modal-invite');
-  }catch(e){ console.error('Invite create error:',e); showToast('Error: '+e.message); }
+  }catch(e){ 
+    console.error('Invite create error:',e); 
+    showToast('Error: '+e.message); 
+  }
 };
 window.copyInviteCode=()=>{
   navigator.clipboard.writeText(document.getElementById('invite-code-display').textContent).then(()=>showToast('Copied!'));
@@ -4833,7 +5165,7 @@ window.renderInterior=renderInterior;
 async function saveHealthProfile() {
   const name = document.getElementById('hp-name').value.trim();
   const relation = document.getElementById('hp-relation').value;
-  const conditionType = document.getElementById('hp-conditionType')?.value || 'Cancer';
+  const conditionType = document.getElementById('hp-conditionType').value;
   const diagnosis = document.getElementById('hp-diagnosis').value.trim();
   const diagnosedOn = document.getElementById('hp-diagnosedOn').value;
   const bloodGroup = document.getElementById('hp-bloodGroup').value.trim();
@@ -4844,7 +5176,9 @@ async function saveHealthProfile() {
 
   try {
     const payload = {
-      name, relation, conditionType, diagnosis, diagnosedOn, bloodGroup,
+      name, relation, 
+      conditionType: conditionType || 'Other',
+      diagnosis, diagnosedOn, bloodGroup,
       treatingHospital: hospital, treatingDoctor: doctor,
       createdBy: CU.uid,
       createdAt: serverTimestamp(), updatedAt: serverTimestamp()
@@ -4855,6 +5189,398 @@ async function saveHealthProfile() {
     openPatientDashboard(docRef.id);
   } catch(e) { console.error(e); showToast('Error saving profile'); }
 }
+
+// ── SYMPTOM DIARY ──
+let _selectedSeverity = null;
+
+function buildSymptomDiaryHtml(symptoms, isShared) {
+  const recent = symptoms.slice(0, 5);
+  
+  if (recent.length === 0 && isShared) return ''; // Don't show empty section for shared users
+  
+  return `
+    <div class="health-card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="health-card-title">🩺 Symptom Diary</div>
+        ${!isShared ? '<button class="btn-sm" onclick="openSymptomDiaryModal()">+ Log</button>' : ''}
+      </div>
+      ${recent.length > 0 ? recent.map(s => `
+        <div style="display:flex;gap:12px;padding:10px;background:var(--surface);border-radius:var(--r-sm);margin-bottom:8px">
+          <div style="width:40px;height:40px;border-radius:50%;background:${getSeverityColor(s.severity)};display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:white;flex-shrink:0">${s.severity}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px">${safeHtml(s.symptom)}</div>
+            ${s.notes ? '<div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">' + safeHtml(s.notes) + '</div>' : ''}
+            <div style="font-size:10px;color:var(--text-faint)">${formatReportDate(s.date)} · ${getSeverityLabel(s.severity)}</div>
+          </div>
+        </div>
+      `).join('') : '<div style="font-size:12px;color:var(--text-faint);text-align:center;padding:20px">No symptoms logged yet</div>'}
+    </div>
+  `;
+}
+
+function getSeverityColor(severity) {
+  const colors = {
+    1: 'var(--green)',
+    2: '#93c5fd',
+    3: 'var(--gold)',
+    4: 'var(--orange)',
+    5: 'var(--red)'
+  };
+  return colors[severity] || 'var(--text-dim)';
+}
+
+function getSeverityLabel(severity) {
+  const labels = {
+    1: 'Mild',
+    2: 'Mild-Moderate',
+    3: 'Moderate',
+    4: 'Moderate-Severe',
+    5: 'Severe'
+  };
+  return labels[severity] || 'Unknown';
+}
+
+window.openSymptomDiaryModal = function() {
+  if (window._isSharedHealthProfile) {
+    showToast('Read-only access - cannot log symptoms');
+    return;
+  }
+  
+  // Reset form
+  document.getElementById('symptom-name').value = '';
+  document.getElementById('symptom-notes').value = '';
+  _selectedSeverity = null;
+  
+  // Reset severity buttons
+  document.querySelectorAll('.severity-btn').forEach(btn => {
+    btn.classList.remove('selected');
+  });
+  document.getElementById('severity-label').textContent = 'Select severity level';
+  
+  openModal('modal-symptom-diary');
+  
+  // Focus on symptom input
+  setTimeout(() => {
+    document.getElementById('symptom-name').focus();
+  }, 100);
+};
+
+window.selectSeverity = function(severity) {
+  _selectedSeverity = severity;
+  
+  // Update button states
+  document.querySelectorAll('.severity-btn').forEach(btn => {
+    btn.classList.remove('selected');
+  });
+  const selectedBtn = document.querySelector(`.severity-btn[data-severity="${severity}"]`);
+  if (selectedBtn) selectedBtn.classList.add('selected');
+  
+  // Update label
+  document.getElementById('severity-label').textContent = getSeverityLabel(severity);
+};
+
+window.saveSymptom = async function() {
+  const symptomName = document.getElementById('symptom-name').value.trim();
+  const notes = document.getElementById('symptom-notes').value.trim();
+  
+  if (!symptomName) {
+    showToast('Please enter a symptom');
+    return;
+  }
+  
+  if (!_selectedSeverity) {
+    showToast('Please select severity level');
+    return;
+  }
+  
+  try {
+    const payload = {
+      symptom: symptomName,
+      severity: _selectedSeverity,
+      notes: notes || null,
+      date: new Date().toISOString().split('T')[0],
+      createdAt: serverTimestamp(),
+      createdBy: CU.uid
+    };
+    
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/symptoms`), payload);
+    
+    showToast('Symptom logged ✓');
+    closeModal('modal-symptom-diary');
+    
+    // Refresh overview to show new symptom
+    renderHealthTab();
+  } catch(e) {
+    console.error('Error logging symptom:', e);
+    showToast('Error logging symptom');
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// Netflix-Style Care Chat Modal
+// ═══════════════════════════════════════════════════════════════
+
+window.openCareChatModal = function() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return;
+  
+  // Generate contextual suggestions
+  const suggestions = getCareChatSuggestions();
+  const suggestionsHtml = suggestions.map(s => 
+    `<button onclick="askCareChatSuggestion('${s.replace(/'/g, "\\'")}')" style="
+      padding:12px 20px;
+      background:rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.12);
+      border-radius:24px;
+      color:var(--text);
+      font-size:14px;
+      font-weight:400;
+      cursor:pointer;
+      transition:all 0.2s;
+      white-space:nowrap;
+    " onmouseover="this.style.background='rgba(255,255,255,0.15)';this.style.borderColor='rgba(201,168,76,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.08)';this.style.borderColor='rgba(255,255,255,0.12)'">${safeHtml(s)}</button>`
+  ).join('');
+  
+  document.getElementById('care-chat-suggestions').innerHTML = suggestionsHtml;
+  
+  // Clear input
+  document.getElementById('care-chat-input').value = '';
+  
+  // Load recent chat history
+  loadCareChatHistory();
+  
+  // Open modal
+  openModal('modal-care-chat-full');
+  
+  // Focus input after a brief delay
+  setTimeout(() => {
+    document.getElementById('care-chat-input').focus();
+  }, 300);
+};
+
+function getCareChatSuggestions() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return [];
+  
+  const suggestions = [];
+  
+  // Based on recent reports
+  if (activePatientData.reports.length > 0) {
+    suggestions.push("What do the latest blood tests show?");
+  }
+  
+  // Based on medications
+  if (activePatientData.medications.filter(m => m.active !== false).length > 0) {
+    suggestions.push("Any medication side effects?");
+  }
+  
+  // Based on condition type
+  if (p.conditionType === 'Cancer') {
+    suggestions.push("How is treatment progressing?");
+    suggestions.push("What should I watch for?");
+  } else if (p.conditionType === 'Diabetes') {
+    suggestions.push("How are blood sugar levels?");
+  } else if (p.conditionType === 'Hypertension') {
+    suggestions.push("How is blood pressure trending?");
+  }
+  
+  // Based on symptoms
+  if (activePatientData.symptoms && activePatientData.symptoms.length > 0) {
+    suggestions.push("Explain recent symptoms");
+  }
+  
+  // Generic
+  suggestions.push("Summarize health status");
+  suggestions.push("Prepare for doctor visit");
+  
+  return suggestions.slice(0, 6); // Max 6 chips
+}
+
+window.askCareChatSuggestion = function(question) {
+  document.getElementById('care-chat-input').value = question;
+  sendCareChatQuery();
+};
+
+window.sendCareChatQuery = async function() {
+  const input = document.getElementById('care-chat-input');
+  const question = input.value.trim();
+  
+  if (!question) {
+    showToast('Please enter a question');
+    return;
+  }
+  
+  // Clear input
+  input.value = '';
+  
+  // Add user message to history
+  addCareChatMessage('user', question);
+  
+  // Show loading
+  addCareChatMessage('assistant', '...', true);
+  
+  try {
+    // Call existing askHealthAI function
+    const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+    const context = buildHealthChatContext(p);
+    const answer = await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, 800);
+    
+    // Remove loading message
+    const historyEl = document.getElementById('care-chat-history');
+    const loadingMsg = historyEl.querySelector('[data-loading="true"]');
+    if (loadingMsg) loadingMsg.remove();
+    
+    // Add AI response
+    addCareChatMessage('assistant', answer);
+    
+    // Save to Firestore
+    await addDoc(collection(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/chatHistory`), {
+      question: question,
+      answer: answer,
+      createdAt: serverTimestamp(),
+      createdBy: CU.uid
+    });
+    
+  } catch(e) {
+    console.error('Care chat error:', e);
+    
+    // Remove loading message
+    const historyEl = document.getElementById('care-chat-history');
+    const loadingMsg = historyEl.querySelector('[data-loading="true"]');
+    if (loadingMsg) loadingMsg.remove();
+    
+    addCareChatMessage('assistant', '❌ Error: ' + (e.message || 'Failed to get response'));
+  }
+};
+
+function addCareChatMessage(role, text, isLoading = false) {
+  const historyEl = document.getElementById('care-chat-history');
+  const isUser = role === 'user';
+  
+  const msgDiv = document.createElement('div');
+  msgDiv.style.cssText = `
+    margin-bottom:20px;
+    display:flex;
+    flex-direction:column;
+    align-items:${isUser ? 'flex-end' : 'flex-start'};
+  `;
+  
+  if (isLoading) {
+    msgDiv.setAttribute('data-loading', 'true');
+  }
+  
+  const bubble = document.createElement('div');
+  bubble.style.cssText = `
+    max-width:85%;
+    padding:14px 18px;
+    border-radius:20px;
+    background:${isUser ? 'linear-gradient(135deg, rgba(201,168,76,0.9) 0%, rgba(201,168,76,1) 100%)' : 'rgba(255,255,255,0.08)'};
+    color:${isUser ? '#0A0E27' : 'var(--text)'};
+    font-size:15px;
+    line-height:1.6;
+    white-space:pre-wrap;
+    word-wrap:break-word;
+    font-weight:${isUser ? '500' : '400'};
+    box-shadow:${isUser ? '0 4px 12px rgba(201,168,76,0.2)' : '0 2px 8px rgba(0,0,0,0.3)'};
+  `;
+  
+  // Use innerHTML for formatted text (markdown-like)
+  if (!isUser && !isLoading) {
+    bubble.innerHTML = formatChatResponse(text);
+  } else {
+    bubble.textContent = text;
+  }
+  
+  msgDiv.appendChild(bubble);
+  historyEl.appendChild(msgDiv);
+  
+  // Scroll to show the new message - use requestAnimationFrame to ensure DOM has updated
+  requestAnimationFrame(() => {
+    // Scroll to bottom to show the latest message
+    historyEl.scrollTop = historyEl.scrollHeight;
+  });
+}
+
+function loadCareChatHistory() {
+  const historyEl = document.getElementById('care-chat-history');
+  historyEl.innerHTML = '';
+  
+  // Show last 5 conversations from activePatientData.chatHistory
+  const recentChats = (activePatientData.chatHistory || []).slice(-5);
+  
+  if (recentChats.length === 0) {
+    historyEl.innerHTML = `
+      <div style="text-align:center;color:var(--text-dim);padding:60px 20px;font-size:14px">
+        <div style="font-size:48px;margin-bottom:16px;opacity:0.6">💬</div>
+        <div style="font-size:16px;font-weight:500;color:var(--text);margin-bottom:8px">No conversations yet</div>
+        <div style="font-size:13px;opacity:0.7">Ask a question or tap a suggestion above</div>
+      </div>
+    `;
+    return;
+  }
+  
+  recentChats.forEach(chat => {
+    addCareChatMessage('user', chat.question);
+    addCareChatMessage('assistant', chat.answer);
+  });
+}
+
+async function clearCareChatHistory() {
+  if (!confirm('Clear all chat history for this patient? This cannot be undone.')) return;
+  
+  try {
+    const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+    const chatDocs = await getDocs(collection(db, `${base}/chatHistory`));
+    
+    const batch = writeBatch(db);
+    chatDocs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+    
+    // Clear local cache
+    activePatientData.chatHistory = [];
+    
+    // Reload empty state
+    loadCareChatHistory();
+    
+    showToast('Chat history cleared ✓');
+  } catch(e) {
+    console.error('Clear chat error:', e);
+    showToast('Failed to clear chat history');
+  }
+}
+
+window.clearCareChatHistory = clearCareChatHistory;
+
+window.startCareChatVoice = function() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    showToast('Voice input not supported in this browser');
+    return;
+  }
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recognition = new SpeechRecognition();
+  
+  recognition.lang = 'en-US';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+  
+  recognition.onstart = function() {
+    showToast('🎤 Listening...');
+  };
+  
+  recognition.onresult = function(event) {
+    const transcript = event.results[0][0].transcript;
+    document.getElementById('care-chat-input').value = transcript;
+    showToast('Got it! ✓');
+  };
+  
+  recognition.onerror = function(event) {
+    console.error('Speech recognition error:', event.error);
+    showToast('Voice input failed');
+  };
+  
+  recognition.start();
+};
 
 async function deleteHealthProfile() {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
@@ -5546,39 +6272,35 @@ function renderHealthProfiles() {
   
   let html = '';
   
-  const conditionColors = {'Cancer':'#e05c5c','Diabetes':'#3498db','Hypertension':'#e74c3c','Thyroid Disorder':'#9b59b6','Heart Disease':'#c0392b','Kidney Disease':'#16a085','Obesity / Fatty Liver':'#e67e22','PCOS/PCOD':'#8e44ad','Asthma / COPD':'#2980b9','Arthritis':'#7f8c8d','Fitness & Wellness':'#27ae60','Post-Surgery Recovery':'#d35400','Mental Health':'#6c5ce7','Pregnancy':'#fd79a8','Other / General':'#C9A84C'};
-
   // Owned profiles
   if (ownedProfiles.length > 0) {
-    html += ownedProfiles.map(p => {
-      const badgeColor = conditionColors[p.conditionType] || conditionColors['Other / General'];
-      const badge = p.conditionType ? `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:${badgeColor};color:#fff;white-space:nowrap;flex-shrink:0">${safeHtml(p.conditionType)}</span>` : '';
-      return `
-        <div class="health-card" onclick="openPatientDashboard('${p.id}')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-            <div class="health-card-title">${safeHtml(p.name)}</div>
-            ${badge}
-          </div>
-          <div class="health-card-sub">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
-          <div style="font-size:10px;color:var(--text-faint)">Last updated: ${p.updatedAt ? fmtDate(p.updatedAt.toDate()) : '—'}</div>
-        </div>`;
-    }).join('');
+    html += ownedProfiles.map(p => `
+      <div class="health-card" onclick="openPatientDashboard('${p.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+          <div class="health-card-title">${safeHtml(p.name)}</div>
+          ${p.conditionType ? '<span class="tag tg-' + getConditionColor(p.conditionType) + '" style="font-size:9px;padding:2px 8px">' + safeHtml(p.conditionType) + '</span>' : ''}
+        </div>
+        <div class="health-card-sub">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
+        <div style="font-size:10px;color:var(--text-faint)">Last updated: ${p.updatedAt ? fmtDate(p.updatedAt.toDate()) : '—'}</div>
+      </div>
+    `).join('');
   }
   
   // Shared profiles
   if (sharedProfiles.length > 0) {
-    html += '<div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;font-weight:600">Shared With You</div>';
+    html += '<div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;margin:20px 0 10px;font-weight:600">📋 Shared With You</div>';
     html += sharedProfiles.map(p => {
       const members = data.members || [];
       const owner = members.find(m => m.uid === p.createdBy);
       return `
         <div class="health-card" onclick="openPatientDashboard('${p.id}')" style="border-left:3px solid var(--blue)">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+            <div style="flex:1">
               <div class="health-card-title">${safeHtml(p.name)} <span style="font-size:10px;color:var(--blue);background:rgba(100,150,255,0.1);padding:2px 6px;border-radius:4px;margin-left:6px">SHARED</span></div>
               <div class="health-card-sub">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
               <div style="font-size:10px;color:var(--text-faint)">Shared by ${safeHtml(owner?.name || 'Unknown')} · Read-only</div>
             </div>
+            ${p.conditionType ? '<span class="tag tg-' + getConditionColor(p.conditionType) + '" style="font-size:9px;padding:2px 8px;margin-left:8px">' + safeHtml(p.conditionType) + '</span>' : ''}
           </div>
         </div>
       `;
@@ -5711,7 +6433,7 @@ function scheduleRenderHealthTab() {
 function subscribeActivePatient() {
   if(!activeHealthProfileId) return;
   if(activePatientUnsubs.length) { activePatientUnsubs.forEach(u => u()); activePatientUnsubs = []; }
-  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [], chatHistory: [] };
+  activePatientData = { reports: [], medications: [], visits: [], bills: [], timeline: [], vitals: [], doseLogs: [], notes: [], chatHistory: [], symptoms: [] };
 
   // Get the profile to determine which family it belongs to
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
@@ -5774,8 +6496,18 @@ function subscribeActivePatient() {
   } catch(e) {
     console.warn('Chat history query failed:', e);
   }
+  
+  let u10 = null;
+  try {
+    u10 = onSnapshot(query(collection(db, `${base}/symptoms`), orderBy('createdAt', 'desc'), limit(10)), s => {
+      activePatientData.symptoms = s.docs.map(d => ({id: d.id, ...d.data()})); 
+      if (activeHealthTab === 'overview') scheduleRenderHealthTab();
+    });
+  } catch(e) {
+    console.warn('Symptoms query failed:', e);
+  }
 
-  activePatientUnsubs = [u1, u2, u3, u4, u5].concat([u6, u6Fallback, u7, u8, u9].filter(Boolean));
+  activePatientUnsubs = [u1, u2, u3, u4, u5].concat([u6, u6Fallback, u7, u8, u9, u10].filter(Boolean));
 }
 
 function switchHealthTab(tab, btn) {
@@ -5785,6 +6517,7 @@ function switchHealthTab(tab, btn) {
   document.querySelectorAll('.health-tab-pane').forEach(p => p.style.display = 'none');
   document.getElementById(`health-tab-${tab}`).style.display = 'block';
   renderHealthTab();
+  updateAshaChips(); // Update Asha chips for new tab
 }
 
 function renderHealthTab() {
@@ -5828,6 +6561,8 @@ function renderHealthOverview() {
 function _renderHealthOverviewInner(el) {
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if(!p) return;
+  
+  const isShared = window._isSharedHealthProfile;
 
   // Critical alert from most recent urgent report
   const urgentReport = activePatientData.reports.find(r => r.urgency === 'urgent');
@@ -5956,8 +6691,7 @@ function _renderHealthOverviewInner(el) {
 
   // Care Summary — collapsible
   const summary = p.aiSummary || '';
-  const teaserRaw = summary ? summary.replace(/\*\*/g, '').replace(/\*/g, '').replace(/^#{1,3}\s/gm, '').replace(/^[-•]\s/gm, '') : '';
-  const teaser = teaserRaw ? teaserRaw.slice(0, 90) + (teaserRaw.length > 90 ? '…' : '') : 'Tap update to generate a status summary.';
+  const teaser = summary ? summary.slice(0, 90) + (summary.length > 90 ? '…' : '') : 'Tap update to generate a status summary.';
   const summaryUpdatedAt = getTimestampMillis(p.aiSummaryUpdatedAt);
   const summaryUpdatedLabel = summaryUpdatedAt ? `Updated ${timeAgoLabel(summaryUpdatedAt)}` : 'Not updated yet';
   const summaryStale = p.aiSummaryStale === true;
@@ -5973,9 +6707,15 @@ function _renderHealthOverviewInner(el) {
       <div class="health-collapsible-body" id="health-summary-body">
         <div style="font-size:13px;line-height:1.6;color:var(--text-dim);padding-top:10px" id="health-ai-summary-text">${formatChatResponse(summary || 'No summary yet.')}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:10px;color:var(--text-faint)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:10px;color:var(--text-faint);flex-wrap:wrap;gap:8px">
         <span>${summaryUpdatedLabel}${summaryStale ? ' · needs update' : ''}</span>
-        <button class="btn-sm" onclick="generateAISummary()"><span id="ai-sum-btn-icon">🔄</span> Update summary</button>
+        <div style="display:flex;gap:8px">
+          <button id="btn-audio-brief" class="btn-sm" onclick="playHealthBrief()" 
+            style="background:var(--purple-soft);border:1px solid rgba(123,94,167,0.3);color:var(--purple)">
+            ▶ Play Brief
+          </button>
+          <button class="btn-sm" onclick="generateAISummary()"><span id="ai-sum-btn-icon">🔄</span> Update</button>
+        </div>
       </div>
     </div>`;
 
@@ -6074,14 +6814,14 @@ function _renderHealthOverviewInner(el) {
         <span style="font-size:10px;color:var(--text-faint)">${formatReportDate(vitalsLatest.date)} · ${safeHtml(vitalsLatest.recordedAt||'home')}</span>
       </div>
       <div class="health-vitals-grid" style="grid-template-columns:repeat(3,1fr)">
-        ${vitalsLatest.bp_systolic ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bp_systolic))}/${safeHtml(String(vitalsLatest.bp_diastolic||'?'))}</div><div class="health-vital-chip-lbl">BP</div></div>` : ''}
-        ${vitalsLatest.pulse ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.pulse))}</div><div class="health-vital-chip-lbl">Pulse</div></div>` : ''}
-        ${vitalsLatest.spo2 ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.spo2))}%</div><div class="health-vital-chip-lbl">SpO2</div></div>` : ''}
-        ${vitalsLatest.temperature ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.temperature))}${safeHtml(vitalsLatest.temperatureUnit || '°F')}</div><div class="health-vital-chip-lbl">Temp</div></div>` : ''}
-        ${vitalsLatest.weight ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.weight))} kg</div><div class="health-vital-chip-lbl">Weight</div></div>` : ''}
-        ${vitalsLatest.bloodSugar ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bloodSugar))}</div><div class="health-vital-chip-lbl">Sugar</div></div>` : ''}
+        ${vitalsLatest.bp_systolic ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bp_systolic))}/${safeHtml(String(vitalsLatest.bp_diastolic||'?'))}</div>${generateVitalSparkline(activePatientData.vitals, 'bp_systolic')}<div class="health-vital-chip-lbl">BP</div></div>` : ''}
+        ${vitalsLatest.pulse ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.pulse))}</div>${generateVitalSparkline(activePatientData.vitals, 'pulse')}<div class="health-vital-chip-lbl">Pulse</div></div>` : ''}
+        ${vitalsLatest.spo2 ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.spo2))}%</div>${generateVitalSparkline(activePatientData.vitals, 'spo2')}<div class="health-vital-chip-lbl">SpO2</div></div>` : ''}
+        ${vitalsLatest.temperature ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.temperature))}${safeHtml(vitalsLatest.temperatureUnit || '°F')}</div>${generateVitalSparkline(activePatientData.vitals, 'temperature')}<div class="health-vital-chip-lbl">Temp</div></div>` : ''}
+        ${vitalsLatest.weight ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.weight))} kg</div>${generateVitalSparkline(activePatientData.vitals, 'weight')}<div class="health-vital-chip-lbl">Weight</div></div>` : ''}
+        ${vitalsLatest.bloodSugar ? `<div class="health-vital-chip"><div class="health-vital-chip-val">${safeHtml(String(vitalsLatest.bloodSugar))}</div>${generateVitalSparkline(activePatientData.vitals, 'bloodSugar')}<div class="health-vital-chip-lbl">Sugar</div></div>` : ''}
       </div>
-      <div style="font-size:10px;color:var(--text-faint);margin-top:6px">Latest values across recent readings</div>
+      <div style="font-size:10px;color:var(--text-faint);margin-top:6px">Latest values with 10-day trend · Tap to see full history</div>
     </div>` : '';
 
   // Slim stats + timeline
@@ -6103,11 +6843,15 @@ function _renderHealthOverviewInner(el) {
     ${vitalsHtml}
     ${medScheduleHtml}
     ${markersHtml}
+    ${buildSymptomDiaryHtml(activePatientData.symptoms || [], isShared)}
 
     <div class="health-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <div class="health-card-title">🕐 Recent Timeline</div>
-        <button class="btn-sm" onclick="switchHealthTab('visits',document.querySelectorAll('#health-tabs .chip')[4])">View All</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm" onclick="openTreatmentTimeline()">🏥 Treatment View</button>
+          <button class="btn-sm" onclick="switchHealthTab('visits',document.querySelectorAll('#health-tabs .chip')[4])">View All</button>
+        </div>
       </div>
       ${activePatientData.timeline.slice(0, 4).map(e => `
         <div class="health-timeline-item">
@@ -6163,20 +6907,47 @@ async function renderHealthReports() {
   const el = document.getElementById('health-tab-reports');
   const isShared = window._isSharedHealthProfile;
   
-  // Trends
-  const hemoglobinTrend = activePatientData.reports
-    .filter(r => r.keyFindings?.some(f => f.name.toLowerCase().includes('hemoglobin')))
-    .map(r => ({ date: r.date, val: r.keyFindings.find(f => f.name.toLowerCase().includes('hemoglobin')).value }))
-    .reverse();
+  // Build comprehensive trends for multiple markers
+  const trendData = buildMarkerTrends(activePatientData.reports);
   
   let trendHtml = '';
-  if(hemoglobinTrend.length > 1) {
-    trendHtml = `<div class="health-card" style="background:var(--gold-soft)">
-      <div class="health-card-title" style="font-size:12px">Hemoglobin Trend</div>
-      <div style="font-family:'DM Mono',monospace;font-size:14px;color:var(--gold);margin-top:4px">
-        ${hemoglobinTrend.map((t, i) => `${t.val}${i < hemoglobinTrend.length-1 ? ' → ' : ''}`).join('')}
+  if(trendData.length > 0) {
+    trendHtml = `
+      <div class="health-card" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="health-card-title">📈 Trend Analysis</div>
+          <button class="btn-sm" onclick="openTrendChartModal()">View Charts →</button>
+        </div>
+        ${trendData.slice(0, 3).map(trend => {
+          const latest = trend.values[trend.values.length - 1];
+          const previous = trend.values.length > 1 ? trend.values[trend.values.length - 2] : null;
+          const change = previous ? ((latest.numVal - previous.numVal) / previous.numVal * 100).toFixed(1) : null;
+          const improving = trend.improving;
+          return `
+            <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--gold-border)">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <div style="font-size:13px;font-weight:600">${safeHtml(trend.name)}</div>
+                <div style="display:flex;align-items:center;gap:6px">
+                  ${change ? '<span style="font-size:11px;color:var(--text-faint)">' + (change > 0 ? '+' : '') + change + '%</span>' : ''}
+                  <span style="font-size:16px">${improving === true ? '↓' : improving === false ? '↑' : '—'}</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                ${trend.values.map((v, i) => {
+                  const isLatest = i === trend.values.length - 1;
+                  return '<div style="flex:1;text-align:center">' +
+                    '<div style="font-size:' + (isLatest ? '16' : '12') + 'px;font-weight:' + (isLatest ? '700' : '500') + ';font-family:\'DM Mono\',monospace;color:' + (isLatest ? 'var(--gold)' : 'var(--text-dim)') + '">' + safeHtml(v.val) + '</div>' +
+                    '<div style="font-size:9px;color:var(--text-faint);margin-top:2px">' + formatShortDate(v.date) + '</div>' +
+                  '</div>' + (i < trend.values.length - 1 ? '<div style="color:var(--text-faint)">→</div>' : '');
+                }).join('')}
+              </div>
+              ${renderMiniSparkline(trend.values)}
+            </div>
+          `;
+        }).join('')}
+        ${trendData.length > 3 ? '<div style="text-align:center;margin-top:8px"><button class="btn-sm" onclick="openTrendChartModal()">View All Trends</button></div>' : ''}
       </div>
-    </div>`;
+    `;
   }
 
   el.innerHTML = `
@@ -6189,16 +6960,19 @@ async function renderHealthReports() {
       ${activePatientData.reports.map(r => `
         <div class="health-card">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="this.closest('.health-card').classList.toggle('expanded')">
-            <div>
+            <div style="flex:1">
               <div class="health-card-title">${safeHtml(r.title)}</div>
-              <div class="health-card-sub">${formatReportDate(r.date)}</div>
+              <div class="health-card-sub" style="display:flex;align-items:center;gap:8px">
+                <span>${formatReportDate(r.date)}</span>
+                ${!isShared ? '<button class="btn-ghost" onclick="event.stopPropagation();editReportDate(\'' + r.id + '\',\'' + (r.date || '') + '\')" style="padding:2px 8px;font-size:10px;margin-left:4px">📅 Edit Date</button>' : ''}
+              </div>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <span class="health-urgency-badge urgency-${r.urgency || 'routine'}">${r.urgency || 'routine'}</span>
               ${!isShared ? '<button class="edit-btn" onclick="event.stopPropagation();deleteHealthReport(\'' + r.id + '\')">✕</button>' : ''}
             </div>
           </div>
-          <div style="font-size:13px;line-height:1.5;color:var(--text-dim);margin-top:8px">${formatChatResponse(r.aiSummary || '')}</div>
+          <div style="font-size:13px;line-height:1.5;color:var(--text-dim);margin-top:8px">${safeHtml(r.aiSummary)}</div>
           <div class="report-details" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--gold-border)">
             <div style="font-size:11px;font-weight:600;margin-bottom:8px;text-transform:uppercase">Key Findings</div>
             ${(r.keyFindings || []).map(f => `
@@ -6280,7 +7054,7 @@ function renderHealthMeds() {
         <div class="health-card-title" style="margin-bottom:10px">📝 Care Notes & Supplements</div>
         ${notes.map(n => `
           <div style="padding:8px 0;border-bottom:1px solid var(--gold-border)">
-            <div style="font-size:12px;color:var(--text);line-height:1.5">${formatChatResponse(n.text || '')}</div>
+            <div style="font-size:12px;color:var(--text);line-height:1.5">${safeHtml(n.text || '')}</div>
             <div style="font-size:10px;color:var(--text-faint);margin-top:4px;font-family:'DM Mono',monospace">
               ${safeHtml(n.category || 'note').toUpperCase()} · ${n.date ? formatReportDate(n.date) : 'today'}
             </div>
@@ -6537,6 +7311,35 @@ function getVitalSeries(vitals, key){
     if(!isNaN(num)) vals.push(num);
   }
   return vals;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 6: VITALS TREND SPARKLINES (Pure SVG)
+// ═══════════════════════════════════════════════════════════════
+
+function generateVitalSparkline(vitals, key, width = 50, height = 20) {
+  const series = getVitalSeries(vitals, key).slice(0, 10).reverse(); // Last 10 readings
+  if (series.length < 2) return '';
+
+  const min = Math.min(...series);
+  const max = Math.max(...series);
+  const range = max - min || 1;
+
+  const points = series.map((val, i) => {
+    const x = (i / (series.length - 1)) * width;
+    const y = height - ((val - min) / range) * height;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  // Determine trend color
+  const first = series[0];
+  const last = series[series.length - 1];
+  const trend = last > first ? 'up' : last < first ? 'down' : 'stable';
+  const color = trend === 'down' ? 'var(--green)' : trend === 'up' ? 'var(--red)' : 'var(--gold)';
+
+  return `<svg width="${width}" height="${height}" style="display:block;margin:4px auto 0 auto">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+  </svg>`;
 }
 
 function buildStandardRangesHtml(){
@@ -7057,17 +7860,23 @@ async function askHealthAI(profileId, question) {
 }
 
 async function callClaudeHealth(prompt, context, isCompassionatePersona = false, model = LLM_MODELS.medicalQA, maxTokens = 1000) {
-  if (!FID || !functions) throw new Error('Not initialized');
+  // PHASE 12: Using Cloud Functions for secure API calls
   try {
-    const fn = httpsCallable(functions, 'healthAskAI');
-    const res = await fn({ fid: FID, prompt, context, isCompassionatePersona, model, maxTokens });
-    return res.data.text;
-  } catch(e) {
-    const msg = e.message || 'AI error';
-    AppMonitor.logFailure('claude_health', msg, { message: msg });
-    if (e.code === 'resource-exhausted' || msg.includes('Rate limited')) throw new Error('Rate limited — please wait 30 seconds');
-    if (e.code === 'unauthenticated') throw new Error('Session expired — please reload');
-    throw e;
+    const healthAIRaw = httpsCallable(functions, 'healthAIRaw');
+    const result = await healthAIRaw({
+      fid: FID,
+      prompt,
+      context,
+      isCompassionatePersona,
+      model
+    });
+    return result.data.text;
+  } catch (error) {
+    console.error('Health AI error:', error);
+    const errMsg = error.message || 'AI request failed';
+    AppMonitor.logFailure('claude_health', errMsg, { message: errMsg });
+    showToast('AI error: ' + errMsg);
+    throw error;
   }
 }
 
@@ -7453,6 +8262,110 @@ function getConditionMarkerLabel(diagnosis) {
   return '🧬 Key Lab Markers';
 }
 
+// Build comprehensive trend data for all tracked markers
+function buildMarkerTrends(reports) {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return [];
+  
+  const baseList = Array.isArray(p.trackedMarkers) && p.trackedMarkers.length ? p.trackedMarkers : DEFAULT_MARKERS;
+  const targetMarkers = baseList.map(m => String(m).toLowerCase().trim());
+  const markerData = {};
+  
+  // Sort reports oldest to newest for trend building
+  const sorted = sortReportsNewest(reports).reverse();
+  
+  for (const r of sorted) {
+    for (const f of (r.keyFindings || [])) {
+      const key = (f.name || '').toLowerCase().trim();
+      const matchKey = targetMarkers.find(t => key.includes(t));
+      if (matchKey) {
+        if (!markerData[matchKey]) {
+          markerData[matchKey] = {
+            name: f.name,
+            unit: f.unit || '',
+            values: []
+          };
+        }
+        const numVal = parseFloat(String(f.value).replace(/[^\d.]/g, ''));
+        if (!isNaN(numVal)) {
+          markerData[matchKey].values.push({
+            date: r.date,
+            val: f.value,
+            numVal: numVal,
+            flag: f.flag || 'normal'
+          });
+        }
+      }
+    }
+  }
+  
+  // Calculate trends and filter to markers with multiple values
+  const trends = [];
+  for (const key in markerData) {
+    const data = markerData[key];
+    if (data.values.length >= 2) {
+      const first = data.values[0].numVal;
+      const last = data.values[data.values.length - 1].numVal;
+      const improving = last > first ? true : last < first ? false : null;
+      trends.push({
+        name: data.name,
+        unit: data.unit,
+        values: data.values,
+        improving: improving
+      });
+    }
+  }
+  
+  return trends;
+}
+
+// Render mini sparkline chart
+function renderMiniSparkline(values) {
+  if (values.length < 2) return '';
+  
+  const nums = values.map(v => v.numVal);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const range = max - min || 1;
+  
+  const points = nums.map((n, i) => {
+    const x = (i / (nums.length - 1)) * 100;
+    const y = 100 - ((n - min) / range * 100);
+    return `${x},${y}`;
+  }).join(' ');
+  
+  const color = values[values.length - 1].numVal > values[0].numVal ? 'var(--gold)' : 'var(--blue)';
+  
+  return `
+    <svg width="100%" height="40" style="margin-top:4px">
+      <polyline 
+        points="${points}" 
+        fill="none" 
+        stroke="${color}" 
+        stroke-width="2" 
+        vector-effect="non-scaling-stroke"
+        style="transform: scaleY(0.8); transform-origin: center;"
+      />
+      ${nums.map((n, i) => {
+        const x = (i / (nums.length - 1)) * 100;
+        const y = 100 - ((n - min) / range * 100) * 0.8;
+        return `<circle cx="${x}%" cy="${y}%" r="3" fill="${color}" />`;
+      }).join('')}
+    </svg>
+  `;
+}
+
+// Format short date for trend display
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  } catch(e) {
+    return dateStr;
+  }
+}
+
 function getKeyMarkers(reports, trackedMarkers) {
   const baseList = Array.isArray(trackedMarkers) && trackedMarkers.length ? trackedMarkers : DEFAULT_MARKERS;
   const targetMarkers = baseList.map(m => String(m).toLowerCase().trim());
@@ -7561,6 +8474,206 @@ window.saveMarkerConfig = async function(){
     closeModal('modal-health-markers');
     renderHealthOverview();
   } catch(e) { console.error(e); showToast('Error saving markers'); }
+};
+
+// Open trend charts modal with detailed visualizations
+window.openTrendChartModal = function() {
+  const trends = buildMarkerTrends(activePatientData.reports);
+  const el = document.getElementById('trend-charts-content');
+  
+  if (trends.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-text">Upload more reports to see trends</div><div style="font-size:11px;color:var(--text-faint);margin-top:6px">Trends appear when you upload the same test multiple times</div></div>';
+    openModal('modal-trend-charts');
+    return;
+  }
+  
+  let html = '';
+  trends.forEach(trend => {
+    const latest = trend.values[trend.values.length - 1];
+    const first = trend.values[0];
+    const change = ((latest.numVal - first.numVal) / first.numVal * 100).toFixed(1);
+    const changeText = change > 0 ? '+' + change + '%' : change + '%';
+    
+    html += `
+      <div class="health-card" style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div>
+            <div class="health-card-title">${safeHtml(trend.name)}</div>
+            <div style="font-size:11px;color:var(--text-faint);margin-top:2px">${trend.values.length} tests · ${changeText} overall</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:20px;font-weight:700;font-family:'DM Mono',monospace;color:var(--gold)">${safeHtml(latest.val)}</div>
+            <div style="font-size:10px;color:var(--text-faint)">${safeHtml(trend.unit)}</div>
+          </div>
+        </div>
+        ${renderFullTrendChart(trend)}
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--gold-border)">
+          <div style="font-size:10px;font-weight:600;color:var(--text-faint);text-transform:uppercase;margin-bottom:6px">All Values</div>
+          ${trend.values.map((v, i) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;${i < trend.values.length - 1 ? 'border-bottom:1px solid var(--gold-border)' : ''}">
+              <span style="color:var(--text-dim)">${formatReportDate(v.date)}</span>
+              <span style="font-family:'DM Mono',monospace;font-weight:${i === trend.values.length - 1 ? '700' : '500'}">${safeHtml(v.val)} ${safeHtml(trend.unit)}</span>
+              <span class="tag tg-${v.flag === 'normal' ? 'green' : v.flag === 'critical' ? 'red' : 'orange'}" style="font-size:9px;padding:1px 6px">${safeHtml(v.flag)}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  });
+  
+  el.innerHTML = html;
+  openModal('modal-trend-charts');
+};
+
+// Render full trend chart with better visualization
+function renderFullTrendChart(trend) {
+  const values = trend.values;
+  if (values.length < 2) return '';
+  
+  const nums = values.map(v => v.numVal);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  const range = max - min || 1;
+  
+  // Calculate points for line
+  const points = nums.map((n, i) => {
+    const x = (i / (nums.length - 1)) * 100;
+    const y = 100 - ((n - min) / range * 80);
+    return `${x},${y}`;
+  }).join(' ');
+  
+  // Determine color based on trend
+  const improving = values[values.length - 1].numVal > values[0].numVal;
+  const lineColor = improving ? 'var(--green)' : 'var(--red)';
+  const fillColor = improving ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
+  
+  return `
+    <div style="background:var(--card);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:16px;margin-top:10px">
+      <svg width="100%" height="120" style="overflow:visible">
+        <!-- Grid lines -->
+        <line x1="0" y1="20%" x2="100%" y2="20%" stroke="var(--gold-border)" stroke-width="1" stroke-dasharray="2,2" />
+        <line x1="0" y1="50%" x2="100%" y2="50%" stroke="var(--gold-border)" stroke-width="1" stroke-dasharray="2,2" />
+        <line x1="0" y1="80%" x2="100%" y2="80%" stroke="var(--gold-border)" stroke-width="1" stroke-dasharray="2,2" />
+        
+        <!-- Area fill -->
+        <polygon 
+          points="${points.split(' ').map(p => p).join(' ')} 100,100 0,100" 
+          fill="${fillColor}"
+        />
+        
+        <!-- Line -->
+        <polyline 
+          points="${points}" 
+          fill="none" 
+          stroke="${lineColor}" 
+          stroke-width="3" 
+          vector-effect="non-scaling-stroke"
+        />
+        
+        <!-- Data points -->
+        ${nums.map((n, i) => {
+          const x = (i / (nums.length - 1)) * 100;
+          const y = 100 - ((n - min) / range * 80);
+          const isLatest = i === nums.length - 1;
+          return `
+            <circle cx="${x}%" cy="${y}%" r="${isLatest ? '5' : '4'}" fill="${lineColor}" stroke="var(--bg)" stroke-width="2" />
+            <text x="${x}%" y="${y - 12}" text-anchor="middle" font-size="10" fill="var(--text)" font-family="DM Mono, monospace" font-weight="${isLatest ? '700' : '500'}">${values[i].val}</text>
+          `;
+        }).join('')}
+      </svg>
+    </div>
+  `;
+}
+
+// Open treatment timeline modal
+window.openTreatmentTimeline = function() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return;
+  
+  // Gather all events: reports, visits, medications started
+  const events = [];
+  
+  // Add reports
+  activePatientData.reports.forEach(r => {
+    events.push({
+      type: 'report',
+      date: r.date,
+      title: r.title,
+      urgency: r.urgency,
+      summary: r.aiSummary,
+      keyFindings: r.keyFindings
+    });
+  });
+  
+  // Add visits
+  activePatientData.visits.forEach(v => {
+    events.push({
+      type: 'visit',
+      date: v.date,
+      title: v.title || 'Doctor Visit',
+      notes: v.notes,
+      doctor: v.doctor
+    });
+  });
+  
+  // Add medication starts
+  activePatientData.medications.forEach(m => {
+    if (m.startDate) {
+      events.push({
+        type: 'medication',
+        date: m.startDate,
+        title: 'Started ' + m.name,
+        dose: m.dose,
+        frequency: m.frequency
+      });
+    }
+  });
+  
+  // Sort by date (newest first)
+  events.sort((a, b) => {
+    const da = new Date(a.date || '');
+    const db = new Date(b.date || '');
+    return db - da;
+  });
+  
+  const el = document.getElementById('treatment-timeline-content');
+  
+  if (events.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="empty-text">No treatment events yet</div></div>';
+    openModal('modal-treatment-timeline');
+    return;
+  }
+  
+  let html = '<div style="position:relative">';
+  
+  events.forEach((event, i) => {
+    const icon = event.type === 'report' ? '📄' : event.type === 'visit' ? '🏥' : '💊';
+    const color = event.type === 'report' ? 'var(--blue)' : event.type === 'visit' ? 'var(--gold)' : 'var(--green)';
+    
+    html += `
+      <div style="display:flex;gap:12px;margin-bottom:20px;position:relative">
+        <!-- Timeline line -->
+        ${i < events.length - 1 ? '<div style="position:absolute;left:15px;top:40px;bottom:-20px;width:2px;background:var(--gold-border)"></div>' : ''}
+        
+        <!-- Icon -->
+        <div style="width:30px;height:30px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;z-index:1">${icon}</div>
+        
+        <!-- Content -->
+        <div style="flex:1;min-width:0">
+          <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px">${formatReportDate(event.date)}</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:4px">${safeHtml(event.title)}</div>
+          ${event.summary ? '<div style="font-size:12px;color:var(--text-dim);line-height:1.5">' + safeHtml(event.summary) + '</div>' : ''}
+          ${event.notes ? '<div style="font-size:12px;color:var(--text-dim);line-height:1.5">' + safeHtml(event.notes) + '</div>' : ''}
+          ${event.dose ? '<div style="font-size:11px;color:var(--text-faint);margin-top:4px">' + safeHtml(event.dose) + ' · ' + safeHtml(event.frequency) + '</div>' : ''}
+          ${event.keyFindings && event.keyFindings.length ? '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' + event.keyFindings.slice(0, 3).map(f => '<span style="font-size:10px;padding:3px 8px;background:var(--card);border:1px solid var(--gold-border);border-radius:12px">' + safeHtml(f.name) + ': ' + safeHtml(f.value) + '</span>').join('') + '</div>' : ''}
+        </div>
+      </div>
+    `;
+  });
+  
+  html += '</div>';
+  el.innerHTML = html;
+  openModal('modal-treatment-timeline');
 };
 
 const MED_REMINDER_TIMES = { morning: '09:00', afternoon: '14:00', evening: '18:00', night: '21:00' };
@@ -7793,6 +8906,28 @@ function timeAgoLabel(ms){
   return months + 'mo ago';
 }
 
+// Get color class for condition type badge
+function getConditionColor(conditionType) {
+  const colorMap = {
+    'Cancer': 'red',
+    'Diabetes': 'orange',
+    'Hypertension': 'red',
+    'Thyroid': 'blue',
+    'Heart Disease': 'red',
+    'Kidney Disease': 'orange',
+    'Obesity/Fatty Liver': 'orange',
+    'PCOS/PCOD': 'blue',
+    'Asthma/COPD': 'blue',
+    'Arthritis': 'orange',
+    'Fitness & Wellness': 'green',
+    'Post-Surgery Recovery': 'blue',
+    'Mental Health': 'purple',
+    'Pregnancy': 'pink',
+    'Other': 'gray'
+  };
+  return colorMap[conditionType] || 'gray';
+}
+
 function safeHtml(input) {
   if (input === null || input === undefined) return '';
   return String(input)
@@ -7801,6 +8936,31 @@ function safeHtml(input) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function markdownToHtml(markdown) {
+  if (!markdown) return '';
+  
+  let html = String(markdown);
+  
+  // Headers (## Header -> <h3>Header</h3>)
+  html = html.replace(/^### (.+)$/gm, '<h4 style="font-size:14px;font-weight:700;color:var(--gold);margin:16px 0 8px 0">$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3 style="font-size:16px;font-weight:700;color:var(--gold);margin:20px 0 10px 0">$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h2 style="font-size:18px;font-weight:700;color:var(--gold);margin:24px 0 12px 0">$1</h2>');
+  
+  // Bold (**text** -> <strong>text</strong>)
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong style="font-weight:700;color:var(--gold)">$1</strong>');
+  
+  // Bullet points (- item -> <li>item</li>)
+  html = html.replace(/^- (.+)$/gm, '<li style="margin-left:20px;margin-bottom:6px">$1</li>');
+  
+  // Wrap consecutive <li> in <ul>
+  html = html.replace(/(<li[^>]*>.*<\/li>\s*)+/gs, '<ul style="margin:8px 0;padding-left:0;list-style-position:inside">$&</ul>');
+  
+  // Line breaks (double newline -> <br><br>)
+  html = html.replace(/\n\n/g, '<br><br>');
+  
+  return html;
 }
 
 function safeParseJSON(text) {
@@ -7837,7 +8997,7 @@ async function compressReportImage(file) {
   });
 }
 
-async function convertPDFToImage(file) {
+async function convertPDFToImage(file, pageNumber = 1) {
   return new Promise(async (resolve, reject) => {
     try {
       // Load PDF.js library if not already loaded
@@ -7853,7 +9013,7 @@ async function convertPDFToImage(file) {
       
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const page = await pdf.getPage(1); // First page only
+      const page = await pdf.getPage(pageNumber);
       
       const viewport = page.getViewport({ scale: 2.0 });
       const canvas = document.createElement('canvas');
@@ -7874,6 +9034,28 @@ async function convertPDFToImage(file) {
   });
 }
 
+async function getPDFPageCount(file) {
+  try {
+    // Load PDF.js library if not already loaded
+    if (!window.pdfjsLib) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      };
+      document.head.appendChild(script);
+      await new Promise(r => script.onload = r);
+    }
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    return pdf.numPages;
+  } catch(e) {
+    console.error('Failed to get PDF page count:', e);
+    return 1;
+  }
+}
+
 function startVoiceInput(targetInputId, onResult) {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
     showToast('Voice input not supported on this browser');
@@ -7892,34 +9074,96 @@ function startVoiceInput(targetInputId, onResult) {
 }
 
 async function handleHealthReport(input) {
-  const file = input.files[0]; if(!file) return;
+  const files = Array.from(input.files);
+  if(!files || files.length === 0) return;
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  
+  // Check if we're adding pages to existing report
+  const isAddingPage = window._addingPageToReport && pendingReport;
+  const existingImages = isAddingPage ? (pendingReport.allImages || [pendingReport.imageBase64]) : [];
   
   // Show loading indicator
   const uploadDiv = document.getElementById('health-report-upload');
+  const previewDiv = document.getElementById('health-report-preview');
+  
+  // Hide preview while processing new pages
+  if (previewDiv && isAddingPage) previewDiv.style.display = 'none';
+  
   if (uploadDiv) {
+    uploadDiv.style.display = 'block';
     uploadDiv.innerHTML = `
       <div style="text-align:center;padding:60px 20px">
         <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:8px">Reading Report...</div>
-        <div style="font-size:11px;color:var(--text-faint)">AI is analyzing the document (10-15 seconds)</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">${isAddingPage ? 'Adding' : 'Reading'} Page${files.length > 1 ? 's' : ''}...</div>
+        <div style="font-size:11px;color:var(--text-faint)">Processing ${files.length} page${files.length > 1 ? 's' : ''} (10-20 seconds)</div>
       </div>
     `;
   }
-  showToast('Reading report... this takes 10-15 seconds');
+  showToast(`${isAddingPage ? 'Adding' : 'Reading'} ${files.length} page${files.length > 1 ? 's' : ''}...`);
   
   try {
-    // Check if PDF or image
-    const isPDF = file.type === 'application/pdf';
-    let base64NoPrefix;
+    // Process all files and collect base64 images
+    const base64Images = [];
     
-    if (isPDF) {
-      // For PDFs, convert first page to image
-      showToast('Converting PDF to image...');
-      base64NoPrefix = await convertPDFToImage(file);
-    } else {
-      base64NoPrefix = await compressReportImage(file);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
+      // Check if PDF or image
+      const isPDF = file.type === 'application/pdf';
+      
+      if (isPDF) {
+        // Get PDF page count and convert all pages
+        const pdfPageCount = await getPDFPageCount(file);
+        console.log(`📄 PDF has ${pdfPageCount} pages`);
+        showToast(`Converting ${pdfPageCount}-page PDF...`);
+        
+        for (let pdfPage = 1; pdfPage <= pdfPageCount; pdfPage++) {
+          const pageNum = existingImages.length + base64Images.length + 1;
+          const totalPages = existingImages.length + files.length - i - 1 + pdfPageCount - pdfPage + 1 + base64Images.length;
+          
+          // Update progress
+          if (uploadDiv) {
+            uploadDiv.innerHTML = `
+              <div style="text-align:center;padding:60px 20px">
+                <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px">Converting PDF Page ${pdfPage}/${pdfPageCount}...</div>
+                <div style="font-size:11px;color:var(--text-faint)">Extracting images from PDF</div>
+              </div>
+            `;
+          }
+          
+          const base64NoPrefix = await convertPDFToImage(file, pdfPage);
+          base64Images.push(base64NoPrefix);
+        }
+        
+        showToast(`✓ Converted ${pdfPageCount} pages from PDF`);
+      } else {
+        // Regular image file
+        const pageNum = existingImages.length + base64Images.length + 1;
+        
+        // Update progress
+        if (uploadDiv) {
+          uploadDiv.innerHTML = `
+            <div style="text-align:center;padding:60px 20px">
+              <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:8px">Processing Page ${pageNum}...</div>
+              <div style="font-size:11px;color:var(--text-faint)">AI is analyzing the document</div>
+            </div>
+          `;
+        }
+        
+        const base64NoPrefix = await compressReportImage(file);
+        base64Images.push(base64NoPrefix);
+      }
     }
+    
+    // If adding to existing report, merge images
+    const allImages = isAddingPage 
+      ? [...existingImages, ...base64Images.map(img => 'data:image/jpeg;base64,' + img)]
+      : base64Images.map(img => 'data:image/jpeg;base64,' + img);
+    
+    // Use the first image for AI analysis (only if new report)
+    const base64NoPrefix = isAddingPage ? existingImages[0].replace('data:image/jpeg;base64,', '') : base64Images[0];
     
     const system = `You are a medical report interpreter for family caregivers in India. Explain medical reports in simple, clear language that a non-medical person can understand. Be compassionate and clear. Respond only in JSON.`;
     const prompt = `Analyse this medical report for a patient with ${p.diagnosis}. 
@@ -7959,20 +9203,180 @@ IMPORTANT:
 
 Respond with JSON only. No markdown. No explanation.`;
     
-    const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalReports);
-    const reportData = safeParseJSON(res);
-    
-    if (!reportData) {
-      showToast('Could not read report format — try a clearer photo');
-      return;
+    // If adding pages to existing report, re-analyze with all pages
+    let reportData;
+    if (isAddingPage) {
+      // Re-analyze with all pages for comprehensive understanding
+      showToast('Re-analyzing with all pages...');
+      
+      // For multi-page, analyze each page and combine findings
+      const allAnalyses = [];
+      for (let i = 0; i < allImages.length; i++) {
+        const pageBase64 = allImages[i].replace('data:image/jpeg;base64,', '');
+        const pagePrompt = `Analyse page ${i+1} of ${allImages.length} of this medical report for a patient with ${p.diagnosis}. Extract all test results, findings, and key information. ${prompt}`;
+        
+        try {
+          const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalReports);
+          const pageData = safeParseJSON(res);
+          if (pageData) allAnalyses.push(pageData);
+        } catch(e) {
+          console.warn('Page', i+1, 'analysis failed:', e);
+        }
+      }
+      
+      // Combine all findings
+      reportData = allAnalyses[0] || pendingReport;
+      if (allAnalyses.length > 1) {
+        // Merge key findings from all pages
+        const allFindings = allAnalyses.flatMap(a => a.keyFindings || []);
+        reportData.keyFindings = allFindings;
+        
+        // Create comprehensive summary by analyzing all findings together
+        const findingsSummary = allFindings.map(f => 
+          `${f.name}: ${f.value}${f.unit || ''} ${f.flag !== 'normal' ? '[' + f.flag.toUpperCase() + ']' : ''}`
+        ).join(', ');
+        
+        // Use AI to create a coherent summary from all findings
+        const comprehensivePrompt = `Create a comprehensive 3-4 sentence summary of this ${allImages.length}-page medical report. 
+
+Key findings across all pages: ${findingsSummary}
+
+Instructions:
+1. Mention the report type (e.g., "Complete health checkup with ${allFindings.length} parameters")
+2. Highlight any ABNORMAL findings (high/low/critical flags)
+3. Note any concerning patterns or conditions suggested by abnormal values (e.g., thyroid issues, kidney function, liver health)
+4. Keep it clear and actionable for a family caregiver
+5. Do NOT just list page-by-page, synthesize the overall health picture
+
+Return ONLY the summary text, no JSON.`;
+
+        try {
+          const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+          reportData.aiSummary = comprehensiveSummary;
+          reportData.summary = comprehensiveSummary;
+        } catch (e) {
+          console.warn('Comprehensive summary failed, using fallback');
+          reportData.aiSummary = `${allImages.length}-page report analyzed. Key findings: ${findingsSummary.slice(0, 300)}...`;
+          reportData.summary = reportData.aiSummary;
+        }
+        
+        // Auto-detect potential health conditions from abnormal findings
+        const abnormalFindings = allFindings.filter(f => f.flag !== 'normal' && f.flag);
+        if (abnormalFindings.length > 0) {
+          reportData.concerningFindings = abnormalFindings.map(f => `${f.name}: ${f.value}${f.unit || ''} [${f.flag.toUpperCase()}]`);
+        }
+      }
+      
+      reportData.allImages = allImages;
+      reportData.pageCount = allImages.length;
+      showToast(`Analyzed all ${allImages.length} pages ✓`);
+      
+    } else {
+      // New report - analyze based on number of pages
+      if (allImages.length > 1) {
+        // Multi-page report - analyze all pages
+        showToast(`Analyzing all ${allImages.length} pages...`);
+        
+        const allAnalyses = [];
+        for (let i = 0; i < allImages.length; i++) {
+          const pageBase64 = allImages[i].replace('data:image/jpeg;base64,', '');
+          const pagePrompt = `Analyse page ${i+1} of ${allImages.length} of this medical report for a patient with ${p.diagnosis}. Extract all test results, findings, and key information. ${prompt}`;
+          
+          if (uploadDiv) {
+            uploadDiv.innerHTML = `
+              <div style="text-align:center;padding:60px 20px">
+                <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px">Analyzing Page ${i+1}/${allImages.length}...</div>
+                <div style="font-size:11px;color:var(--text-faint)">Reading all test results</div>
+              </div>
+            `;
+          }
+          
+          try {
+            const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalReports);
+            const pageData = safeParseJSON(res);
+            if (pageData) allAnalyses.push(pageData);
+          } catch(e) {
+            console.warn('Page', i+1, 'analysis failed:', e);
+          }
+        }
+        
+        // Combine all findings
+        reportData = allAnalyses[0] || {};
+        if (allAnalyses.length > 1) {
+          // Merge key findings from all pages
+          const allFindings = allAnalyses.flatMap(a => a.keyFindings || []);
+          reportData.keyFindings = allFindings;
+          
+          // Create comprehensive summary by analyzing all findings together
+          const findingsSummary = allFindings.map(f => 
+            `${f.name}: ${f.value}${f.unit || ''} ${f.flag !== 'normal' ? '[' + f.flag.toUpperCase() + ']' : ''}`
+          ).join(', ');
+          
+          // Use AI to create a coherent summary from all findings
+          const comprehensivePrompt = `Create a comprehensive 3-4 sentence summary of this ${allImages.length}-page medical report. 
+          
+Key findings across all pages: ${findingsSummary}
+
+Instructions:
+1. Mention the report type (e.g., "Complete health checkup with ${allFindings.length} parameters")
+2. Highlight any ABNORMAL findings (high/low/critical flags)
+3. Note any concerning patterns or conditions suggested by abnormal values (e.g., thyroid issues, kidney function, liver health)
+4. Keep it clear and actionable for a family caregiver
+5. Do NOT just list page-by-page, synthesize the overall health picture
+
+Return ONLY the summary text, no JSON.`;
+
+          try {
+            const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+            reportData.aiSummary = comprehensiveSummary;
+            reportData.summary = comprehensiveSummary;
+          } catch (e) {
+            console.warn('Comprehensive summary failed, using fallback');
+            reportData.aiSummary = `${allImages.length}-page report analyzed. Key findings: ${findingsSummary.slice(0, 300)}...`;
+            reportData.summary = reportData.aiSummary;
+          }
+          
+          // Use most urgent urgency level
+          const urgencies = allAnalyses.map(a => a.urgency).filter(Boolean);
+          if (urgencies.includes('urgent')) reportData.urgency = 'urgent';
+          else if (urgencies.includes('watch')) reportData.urgency = 'watch';
+          
+          // Auto-detect potential health conditions from abnormal findings
+          const abnormalFindings = allFindings.filter(f => f.flag !== 'normal' && f.flag);
+          if (abnormalFindings.length > 0) {
+            reportData.concerningFindings = abnormalFindings.map(f => `${f.name}: ${f.value}${f.unit || ''} [${f.flag.toUpperCase()}]`);
+          }
+        }
+        
+        showToast(`Analyzed all ${allImages.length} pages ✓`);
+        
+      } else {
+        // Single page - analyze as before
+        const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalReports);
+        reportData = safeParseJSON(res);
+        
+        if (!reportData) {
+          showToast('Could not read report format — try a clearer photo');
+          resetReportModal();
+          return;
+        }
+        
+        // Ensure we use aiSummary for consistency
+        if (reportData.summary && !reportData.aiSummary) {
+          reportData.aiSummary = reportData.summary;
+        }
+      }
+      
+      // Store all images (for multi-page reports)
+      reportData.imageBase64 = allImages[0];
+      reportData.allImages = allImages;
+      reportData.pageCount = allImages.length;
     }
     
-    // Ensure we use aiSummary for consistency
-    if (reportData.summary && !reportData.aiSummary) {
-      reportData.aiSummary = reportData.summary;
-    }
+    // Reset flag
+    window._addingPageToReport = false;
     
-    reportData.imageBase64 = 'data:image/jpeg;base64,' + base64NoPrefix;
     pendingReport = reportData;
     window._pendingReport = reportData;
     renderPendingReportPreview(reportData);
@@ -7996,10 +9400,24 @@ Respond with JSON only. No markdown. No explanation.`;
 function renderPendingReportPreview(reportData){
   const analysis = document.getElementById('health-report-analysis');
   if (analysis) {
+    const pageInfo = reportData.pageCount > 1 ? `<div style="font-size:11px;color:var(--text-faint);margin-bottom:8px">📄 ${reportData.pageCount} pages</div>` : '';
+    const imagesPreview = reportData.allImages && reportData.allImages.length > 1 
+      ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-top:12px;padding:8px 0">
+           ${reportData.allImages.map((img, i) => `
+             <div style="flex-shrink:0">
+               <img src="${img}" style="width:80px;height:100px;object-fit:cover;border-radius:var(--r-sm);border:1px solid var(--gold-border)">
+               <div style="font-size:10px;color:var(--text-faint);text-align:center;margin-top:4px">Page ${i+1}</div>
+             </div>
+           `).join('')}
+         </div>`
+      : '';
+    
     analysis.innerHTML =
       '<div class="health-card-title">' + safeHtml(reportData.title || 'Report') + '</div>' +
-      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">' + formatChatResponse(reportData.aiSummary || reportData.summary || '') + '</div>' +
-      '<div style="font-size:11px;color:var(--gold)">Urgency: ' + safeHtml(reportData.urgency || 'routine') + '</div>';
+      pageInfo +
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:10px">' + safeHtml(reportData.aiSummary || reportData.summary || '') + '</div>' +
+      '<div style="font-size:11px;color:var(--gold)">Urgency: ' + safeHtml(reportData.urgency || 'routine') + '</div>' +
+      imagesPreview;
   }
   const preview = document.getElementById('health-report-preview');
   if (preview) preview.style.display = 'block';
@@ -8013,7 +9431,17 @@ function resetReportModal(){
   const preview = document.getElementById('health-report-preview');
   if (preview) preview.style.display = 'none';
   const upload = document.getElementById('health-report-upload');
-  if (upload) upload.style.display = 'block';
+  if (upload) {
+    upload.style.display = 'block';
+    // Restore original upload UI
+    upload.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;border:1px dashed var(--gold-border);border-radius:var(--r-md);cursor:pointer" onclick="document.getElementById('health-report-input').click()">
+        <div style="font-size:40px;margin-bottom:12px">📄</div>
+        <div style="font-size:14px;font-weight:600">Snap or Upload Report</div>
+        <div style="font-size:11px;color:var(--text-faint);margin-top:4px">Image or PDF</div>
+      </div>
+    `;
+  }
   const analysis = document.getElementById('health-report-analysis');
   if (analysis) analysis.innerHTML = '';
 }
@@ -8021,16 +9449,59 @@ function resetReportModal(){
 window.cancelPendingReport = () => {
   pendingReport = null;
   window._pendingReport = null;
+  window._addingPageToReport = false;
   resetReportModal();
   closeModal('modal-health-report');
 };
 
-window.openAddReportModal = () => {
-  if (pendingReport) {
-    renderPendingReportPreview(pendingReport);
-  } else {
-    resetReportModal();
+function addAnotherReportPage() {
+  console.log('📸 Add Another Page clicked');
+  console.log('Pending report exists:', !!pendingReport);
+  console.log('Current page count:', pendingReport?.pageCount || 0);
+  
+  if (!pendingReport) {
+    console.error('No pending report!');
+    showToast('Please start a new report first');
+    return;
   }
+  
+  // Show immediate feedback
+  showToast('Tap to take photo of next page...');
+  
+  // Trigger file input to add another page
+  const input = document.getElementById('health-report-input');
+  if (!input) {
+    console.error('File input not found!');
+    showToast('Error: File input not found');
+    return;
+  }
+  
+  console.log('✅ Triggering file input for additional page');
+  console.log('Input element:', input);
+  
+  // Store current report temporarily
+  window._addingPageToReport = true;
+  
+  // Reset input value to allow selecting same file again
+  input.value = '';
+  
+  // Trigger click
+  try {
+    input.click();
+    console.log('✅ File input clicked');
+  } catch(e) {
+    console.error('Error clicking input:', e);
+    showToast('Error opening camera: ' + e.message);
+  }
+}
+window.addAnotherReportPage = addAnotherReportPage;
+
+window.openAddReportModal = () => {
+  // Always reset when opening modal fresh
+  pendingReport = null;
+  window._pendingReport = null;
+  window._addingPageToReport = false;
+  resetReportModal();
   openModal('modal-health-report');
 };
 
@@ -8052,8 +9523,51 @@ async function confirmSaveReport() {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
     const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
     
-    // Save report
-    await addDoc(collection(db, `${base}/reports`), { ...r, addedAt: serverTimestamp() });
+    console.log('💾 Saving report...');
+    console.log('Report title:', r.title);
+    console.log('Page count:', r.pageCount);
+    console.log('All images count:', r.allImages?.length);
+    
+    // For multi-page reports, store only metadata in main doc, images separately
+    const reportDoc = { ...r };
+    
+    // Remove large image arrays from main document
+    if (r.allImages && r.allImages.length > 1) {
+      console.log('📄 Multi-page report - storing images separately');
+      // Keep only first page in main doc for preview
+      reportDoc.imageBase64 = r.allImages[0];
+      delete reportDoc.allImages; // Will store separately
+      reportDoc.hasMultiplePages = true;
+      reportDoc.pageCount = r.pageCount;
+    }
+    
+    // Calculate size after optimization
+    const approxSize = JSON.stringify(reportDoc).length;
+    console.log('Optimized document size:', Math.round(approxSize / 1024), 'KB');
+    
+    if (approxSize > 900000) {
+      console.warn('⚠️ Document still too large');
+      showToast('Images too large - try taking photos with lower quality');
+      isSavingReport = false;
+      return;
+    }
+    
+    // Save main report document
+    const reportRef = await addDoc(collection(db, `${base}/reports`), { ...reportDoc, addedAt: serverTimestamp() });
+    console.log('✅ Main report saved, ID:', reportRef.id);
+    
+    // Save additional pages as separate documents (if multi-page)
+    if (r.allImages && r.allImages.length > 1) {
+      console.log('💾 Saving additional pages...');
+      for (let i = 1; i < r.allImages.length; i++) {
+        await addDoc(collection(db, `${base}/reports/${reportRef.id}/pages`), {
+          pageNumber: i + 1,
+          imageBase64: r.allImages[i],
+          addedAt: serverTimestamp()
+        });
+        console.log(`✅ Saved page ${i + 1}`);
+      }
+    }
     await addDoc(collection(db, `${base}/timeline`), { date: r.date || todayStr(), type: 'report', title: r.title, detail: r.aiSummary || r.summary, addedAt: serverTimestamp() });
     
     // Create visit if nextVisit is a future date
@@ -8088,28 +9602,51 @@ async function confirmSaveReport() {
     }
     
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummaryStale: true, updatedAt: serverTimestamp() });
+    
+    console.log('✅ Report saved successfully');
+    showToast('Report saved ✓');
+    
     closeModal('modal-health-report');
     pendingReport = null;
     window._pendingReport = null;
+    window._addingPageToReport = false;
     resetReportModal();
     renderHealthReports();
-  } catch(e) { console.error(e); showToast('Error saving'); }
+  } catch(e) { 
+    console.error('❌ Error saving report:', e);
+    console.error('Error code:', e?.code);
+    console.error('Error message:', e?.message);
+    
+    // Show specific error message
+    if (e?.code === 'invalid-argument' || e?.message?.includes('too large')) {
+      showToast('Report too large - try with fewer pages or smaller images');
+    } else if (e?.code === 'permission-denied') {
+      showToast('Permission error - please try again');
+    } else {
+      showToast('Error saving: ' + (e?.message || 'Unknown error'));
+    }
+  }
   finally { isSavingReport = false; }
 }
 
-// Reuse existing receipt vision logic but specialized
+// PHASE 12: Using Cloud Functions for secure image analysis
 async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODELS.medicalReports) {
-  if (!FID || !functions) throw new Error('Not initialized');
   try {
-    const fn = httpsCallable(functions, 'analyzeHealthMedia');
-    const res = await fn({ fid: FID, base64Image: base64NoPrefix, mediaType: 'image/jpeg', systemPrompt: system, userPrompt: prompt, model });
-    return res.data.text;
-  } catch(e) {
-    const msg = e.message || 'Vision AI error';
-    AppMonitor.logFailure('claude_vision', msg, { message: msg });
-    if (e.code === 'resource-exhausted' || msg.includes('Rate limited')) throw new Error('Rate limited — please wait 30 seconds');
-    if (e.code === 'unauthenticated') throw new Error('Session expired — please reload');
-    throw e;
+    const healthAnalyzeImageRaw = httpsCallable(functions, 'healthAnalyzeImageRaw');
+    const result = await healthAnalyzeImageRaw({
+      fid: FID,
+      system,
+      prompt,
+      base64NoPrefix,
+      model
+    });
+    return result.data.text;
+  } catch (error) {
+    console.error('Health image analysis error:', error);
+    const errMsg = error.message || 'Image analysis failed';
+    AppMonitor.logFailure('claude_vision', errMsg, { message: errMsg });
+    showToast('AI error: ' + errMsg);
+    throw error;
   }
 }
 
@@ -8292,6 +9829,87 @@ async function deleteHealthBill(billId) {
   } catch(e) { console.error(e); showToast('Error deleting'); }
 }
 
+// Edit report date
+let _editingReportId = null;
+
+window.editReportDate = function(reportId, currentDate) {
+  if (window._isSharedHealthProfile) {
+    showToast('Read-only access - cannot edit');
+    return;
+  }
+  
+  _editingReportId = reportId;
+  
+  // Pre-fill current date or today's date
+  const dateInput = document.getElementById('edit-report-date-input');
+  if (currentDate && currentDate !== 'undefined') {
+    // Convert date string to YYYY-MM-DD format for input
+    try {
+      const d = new Date(currentDate);
+      if (!isNaN(d.getTime())) {
+        dateInput.value = d.toISOString().split('T')[0];
+      } else {
+        dateInput.value = new Date().toISOString().split('T')[0];
+      }
+    } catch(e) {
+      dateInput.value = new Date().toISOString().split('T')[0];
+    }
+  } else {
+    dateInput.value = new Date().toISOString().split('T')[0];
+  }
+  
+  openModal('modal-edit-report-date');
+};
+
+window.saveReportDate = async function() {
+  if (!_editingReportId || !activeHealthProfileId) return;
+  
+  const dateInput = document.getElementById('edit-report-date-input');
+  const newDate = dateInput.value;
+  
+  if (!newDate) {
+    showToast('Please select a date');
+    return;
+  }
+  
+  // Validate date is not too far in future
+  const selectedDate = new Date(newDate);
+  const today = new Date();
+  const oneYearFromNow = new Date();
+  oneYearFromNow.setFullYear(today.getFullYear() + 1);
+  
+  if (selectedDate > oneYearFromNow) {
+    showToast('Date cannot be more than 1 year in the future');
+    return;
+  }
+  
+  try {
+    const reportRef = doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}/reports`, _editingReportId);
+    await updateDoc(reportRef, { 
+      date: newDate,
+      dateEditedManually: true,
+      dateEditedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    // Mark AI summary as stale since date changed (affects trends)
+    await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { 
+      aiSummaryStale: true, 
+      updatedAt: serverTimestamp() 
+    });
+    
+    showToast('Report date updated ✓');
+    closeModal('modal-edit-report-date');
+    _editingReportId = null;
+    
+    // Refresh the reports view to show updated date
+    renderHealthTab();
+  } catch(e) {
+    console.error('Error updating report date:', e);
+    showToast('Error updating date');
+  }
+};
+
 async function deleteHealthReport(reportId) {
   if (window._isSharedHealthProfile) {
     showToast('Read-only access - cannot delete');
@@ -8329,34 +9947,196 @@ async function deleteVital(vitalId) {
 
 async function generateDoctorSummary() {
   if(!activeHealthProfileId) return;
-  showToast('Generating summary...');
+  
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   const medications = activePatientData.medications.filter(m => m.active !== false);
   const reports = activePatientData.reports.slice(0, 10);
+  const vitals = getLatestVitalSnapshot(activePatientData.vitals || []);
+  const symptoms = (activePatientData.symptoms || []).slice(0, 5);
   
-  const context = `Patient: ${p.relation}, ${p.diagnosis}. Diagnosed: ${p.diagnosedOn}. Meds: ${medications.map(m=>m.name).join(', ')}. Reports: ${reports.map(r=>r.title).join(', ')}.`;
-  const prompt = `Generate a clear medical summary for a new doctor who has never seen this patient before. Format it professionally but keep it concise. Include: diagnosis, timeline, current medications, recent test results, current status, key concerns.`;
+  // Show modal with loading state
+  const modalContent = document.getElementById('doctor-summary-content');
+  modalContent.innerHTML = `
+    <div style="text-align:center;padding:60px 20px">
+      <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px">Generating Summary...</div>
+      <div style="font-size:11px;color:var(--text-faint)">Analyzing patient data</div>
+    </div>
+  `;
+  openModal('modal-doctor-summary');
+  
+  const context = `Patient: ${p.name}, ${p.relation}, ${p.diagnosis}. Diagnosed: ${p.diagnosedOn || 'unknown'}. Condition: ${p.conditionType || 'Other'}. Meds: ${medications.map(m=>m.name + ' ' + m.dose).join(', ')}. Reports: ${reports.map(r=>'['+r.date+'] '+r.title+': '+r.aiSummary).join(' | ')}. Recent symptoms: ${symptoms.map(s=>s.symptom+' (severity '+s.severity+')').join(', ')}.`;
+  const prompt = `Generate a clear, professional medical summary for a new doctor who has never seen this patient before. Format with markdown headings and bullet points. Include: diagnosis & timeline, current medications with dosages, recent test results with key findings, recent symptoms, current status, and key concerns/recommendations.`;
   
   try {
-    const summary = await callClaudeHealth(prompt, context);
-    window._doctorSummaryText = `Medical Summary: ${p.name}\n${'─'.repeat(40)}\n\n${summary}\n\n— Generated by FamilyOS`;
-    document.getElementById('doctor-summary-content').innerHTML = formatChatResponse(summary);
-    openModal('modal-doctor-summary');
-  } catch(e) { console.error(e); showToast('AI error — please try again'); }
-}
-
-function copyDoctorSummary() {
-  navigator.clipboard.writeText(window._doctorSummaryText || '').then(() => showToast('Copied to clipboard ✓'));
-}
-
-function shareDoctorSummary() {
-  const text = window._doctorSummaryText || '';
-  if(navigator.canShare && navigator.canShare({ text })) {
-    navigator.share({ title: 'Doctor Summary — FamilyOS', text });
-  } else {
-    copyDoctorSummary();
+    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalQA, 1200);
+    
+    // Render summary in modal
+    modalContent.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--gold-border);border-radius:var(--r-md);padding:16px;margin-bottom:16px">
+        <div style="font-size:18px;font-weight:700;color:var(--gold);margin-bottom:8px">${safeHtml(p.name)}</div>
+        <div style="font-size:12px;color:var(--text-dim)">${safeHtml(p.relation)} · ${safeHtml(p.diagnosis)}</div>
+        ${p.conditionType ? '<div style="margin-top:8px"><span class="tag tg-' + getConditionColor(p.conditionType) + '" style="font-size:10px">' + safeHtml(p.conditionType) + '</span></div>' : ''}
+      </div>
+      
+      <div id="doctor-summary-text" style="font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin-bottom:20px;max-height:400px;overflow-y:auto;padding:16px;background:var(--card);border-radius:var(--r-md)">${markdownToHtml(summary)}</div>
+      
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <button class="btn-primary" onclick="copyDoctorSummary()" style="flex:1">
+          📋 Copy
+        </button>
+        <button class="btn-primary" onclick="shareDoctorSummary()" style="flex:1">
+          📤 Share
+        </button>
+      </div>
+      <button class="btn-primary" onclick="exportDoctorSummaryPDF()" style="width:100%;background:var(--purple);border-color:var(--purple)">
+        📄 Download PDF
+      </button>
+      
+      <div style="font-size:11px;color:var(--text-faint);text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid var(--gold-border)">
+        Generated by FamilyOS · ${new Date().toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'})}
+      </div>
+    `;
+  } catch(e) { 
+    console.error(e); 
+    modalContent.innerHTML = `
+      <div style="text-align:center;padding:40px 20px">
+        <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">Error Generating Summary</div>
+        <div style="font-size:12px;color:var(--text-dim)">${e.message || 'Please try again'}</div>
+        <button class="btn-primary" onclick="generateDoctorSummary()" style="margin-top:20px">Retry</button>
+      </div>
+    `;
   }
 }
+
+window.copyDoctorSummary = function() {
+  const text = document.getElementById('doctor-summary-text').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('Summary copied to clipboard ✓');
+  }).catch(e => {
+    console.error('Copy failed:', e);
+    showToast('Copy failed - please select and copy manually');
+  });
+};
+
+window.shareDoctorSummary = function() {
+  const text = document.getElementById('doctor-summary-text').textContent;
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  
+  if (navigator.share) {
+    navigator.share({
+      title: `Medical Summary: ${p.name}`,
+      text: text
+    }).then(() => {
+      showToast('Shared successfully ✓');
+    }).catch(e => {
+      if (e.name !== 'AbortError') {
+        console.error('Share failed:', e);
+        showToast('Share cancelled');
+      }
+    });
+  } else {
+    // Fallback: copy to clipboard
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Summary copied - paste in your messaging app ✓');
+    }).catch(e => {
+      showToast('Sharing not supported - use Copy button');
+    });
+  }
+};
+
+window.exportDoctorSummaryPDF = async function() {
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return;
+  
+  showToast('Generating PDF...');
+  
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    
+    // Page dimensions
+    const pageWidth = 210; // A4 width in mm
+    const pageHeight = 297; // A4 height in mm
+    const margin = 20;
+    const contentWidth = pageWidth - (2 * margin);
+    let yPos = margin;
+    
+    // Header
+    doc.setFillColor(201, 168, 76); // Gold
+    doc.rect(0, 0, pageWidth, 40, 'F');
+    
+    doc.setTextColor(7, 7, 10); // Dark text on gold
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Medical Summary', margin, 20);
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Patient: ${p.name}`, margin, 30);
+    
+    yPos = 50;
+    
+    // Patient Info Box
+    doc.setDrawColor(201, 168, 76);
+    doc.setLineWidth(0.5);
+    doc.rect(margin, yPos, contentWidth, 25);
+    
+    doc.setTextColor(50, 50, 50);
+    doc.setFontSize(10);
+    yPos += 8;
+    doc.text(`Relation: ${p.relation}`, margin + 5, yPos);
+    yPos += 6;
+    doc.text(`Diagnosis: ${p.diagnosis}`, margin + 5, yPos);
+    yPos += 6;
+    if (p.conditionType) {
+      doc.text(`Condition: ${p.conditionType}`, margin + 5, yPos);
+      yPos += 6;
+    }
+    
+    yPos += 10;
+    
+    // Summary content
+    const summaryText = document.getElementById('doctor-summary-text').textContent;
+    const lines = doc.splitTextToSize(summaryText, contentWidth);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    
+    for (let i = 0; i < lines.length; i++) {
+      if (yPos > pageHeight - margin) {
+        doc.addPage();
+        yPos = margin;
+      }
+      doc.text(lines[i], margin, yPos);
+      yPos += 6;
+    }
+    
+    // Footer
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        `Generated by FamilyOS • ${new Date().toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'})} • Page ${i} of ${pageCount}`,
+        pageWidth / 2,
+        pageHeight - 10,
+        { align: 'center' }
+      );
+    }
+    
+    // Save PDF
+    const fileName = `Medical_Summary_${p.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+    
+    showToast('PDF downloaded ✓');
+  } catch(e) {
+    console.error('PDF generation failed:', e);
+    showToast('PDF generation failed - please try again');
+  }
+};
 
 function exportHealthPDF() {
   if(!activeHealthProfileId) return;
@@ -8427,34 +10207,11 @@ function exportHealthPDF() {
   
   html += '<hr style="margin:40px 0;opacity:0.2">';
   html += '<p style="font-size:11px;color:#888;text-align:center">Generated by FamilyOS on ' + today + '</p>';
-
-  // Build plain-text version for sharing
-  const p2 = data.healthProfiles.find(x => x.id === activeHealthProfileId);
-  let plainText = `Health Report — ${safeHtml(p2?.name || '')}\nDate: ${today}\n\n`;
-  plainText += `Diagnosis: ${safeHtml(p2?.diagnosis || '')}\n\n`;
-  plainText += `Medications (${medications.length}):\n` + medications.map(m => `• ${m.name} ${m.dose} — ${m.frequency}`).join('\n') + '\n\n';
-  plainText += `Recent Reports:\n` + reports.map(r => `• ${r.title} (${formatReportDate(r.date)}): ${(r.aiSummary||'').slice(0,120)}`).join('\n');
-  window._healthPdfText = plainText;
-
-  // Render in modal
-  const contentEl = document.getElementById('health-pdf-content');
-  if(contentEl) {
-    contentEl.innerHTML = html.replace(/<html>.*?<body[^>]*>/s, '').replace(/<\/body><\/html>/s, '');
-    openModal('modal-health-pdf');
-  }
-}
-
-function copyHealthPDF() {
-  navigator.clipboard.writeText(window._healthPdfText || '').then(() => showToast('Report copied ✓'));
-}
-
-function shareHealthPDF() {
-  const text = window._healthPdfText || '';
-  if(navigator.canShare && navigator.canShare({ text })) {
-    navigator.share({ title: 'Health Report — FamilyOS', text });
-  } else {
-    copyHealthPDF();
-  }
+  html += '</body></html>';
+  
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  setTimeout(() => win.print(), 500);
 }
 
 async function parseMedVoice(transcript) {
@@ -8989,11 +10746,13 @@ window.goPage=(id,btn,subtitle)=>{
   const page=document.getElementById('page-'+pageId);
   if(page) page.classList.add('active');
   if(btn) btn.classList.add('active');
-  document.getElementById('topbar-sub').textContent=subtitle.toUpperCase();
+  const topbarSub = document.getElementById('topbar-sub');
+  if(topbarSub) topbarSub.textContent = subtitle ? subtitle.toUpperCase() : '';
   if(id==='more'||id==='settings') renderMembers();
   if(id==='home') renderCalendar();
   if(id==='activities') renderTasksHub();
   if(id==='health') renderHealthProfiles();
+  updateAshaChips(); // Update Asha chips for new page
 };
 window.switchTasksHub=(view,btn)=>{
   tasksHubView=view;
@@ -9587,6 +11346,7 @@ window.handleHealthAsk = handleHealthAsk;
 window.startVoiceInput = startVoiceInput;
 window.openAddReportModal = openAddReportModal;
 window.handleHealthReport = handleHealthReport;
+window.addAnotherReportPage = addAnotherReportPage;
 window.confirmSaveReport = confirmSaveReport;
 window.saveMedication = saveMedication;
 window.toggleMedActive = toggleMedActive;
@@ -9632,6 +11392,461 @@ document.addEventListener('visibilitychange',()=>{
     if(sm!=='none') LS.del('familyos_session');
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// ASHA GLOBAL AI COMPANION BAR
+// ═══════════════════════════════════════════════════════════════
+
+const ASHA_CHIPS = {
+  health_overview: [
+    { label: 'How is Papa doing?', q: 'Give me a quick status summary for {patientName}' },
+    { label: 'Urgent alerts?', q: 'Are there any urgent health alerts for {patientName}?' },
+    { label: 'Meds today?', q: 'What medications does {patientName} need to take today?' },
+    { label: 'Share update', q: 'Generate a health update I can share with family' },
+  ],
+  health_vitals: [
+    { label: 'BP trend?', q: 'How has blood pressure trended over last 30 days?' },
+    { label: 'Log vitals', q: 'I want to log vitals for {patientName}' },
+    { label: 'Normal range?', q: 'What are normal ranges for current vitals?' },
+  ],
+  health_meds: [
+    { label: 'Refills due?', q: 'Which medications need refill soon?' },
+    { label: 'Side effects?', q: 'What side effects should I watch for with current medications?' },
+    { label: 'Add medicine', q: 'Add a new medication' },
+  ],
+  health_reports: [
+    { label: 'Explain latest', q: 'Explain the most recent report in simple language' },
+    { label: 'Key findings?', q: 'What are the most important findings from recent reports?' },
+    { label: 'Audio brief', q: 'Play me an audio health brief' },
+  ],
+  health_chat: [
+    { label: 'Doctor brief', q: 'Generate a doctor visit brief for {patientName}' },
+    { label: 'Treatment progress?', q: 'How is the treatment progressing overall?' },
+    { label: 'Next steps?', q: 'What should we focus on next based on recent reports?' },
+  ],
+  finance: [
+    { label: 'Monthly spend?', q: 'How much have we spent this month?' },
+    { label: 'Medical costs?', q: 'What are our total medical expenses this month?' },
+    { label: 'Budget status?', q: 'How are we tracking against budget?' },
+    { label: 'Add expense', q: 'Add an expense' },
+  ],
+  activities: [
+    { label: "Today's tasks?", q: "What tasks are pending today?" },
+    { label: 'Upcoming reminders?', q: 'What reminders are coming up this week?' },
+    { label: 'Add reminder', q: 'Add a reminder' },
+  ],
+  home: [
+    { label: 'Family summary', q: 'Give me a summary of what needs attention across the family today' },
+    { label: 'Any urgent?', q: 'Are there any urgent items I should know about?' },
+    { label: 'Asha, hi!', q: 'Hello Asha, what can you help me with?' },
+  ],
+};
+
+function updateAshaChips() {
+  const el = document.getElementById('asha-chips');
+  if (!el) {
+    console.warn('⚠️ Asha chips container not found!');
+    return;
+  }
+  
+  // Determine context key
+  let key = 'home';
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    key = 'health_' + (activeHealthTab || 'overview');
+  } else if (activePage === 'page-finance') key = 'finance';
+  else if (activePage === 'page-activities') key = 'activities';
+
+  const chips = ASHA_CHIPS[key] || ASHA_CHIPS.home;
+  const p = data.healthProfiles?.find(x => x.id === activeHealthProfileId);
+  const patientName = p?.name || 'patient';
+
+  console.log('🔄 Updating Asha chips:', {
+    key,
+    activePage,
+    activeHealthProfileId,
+    patientName,
+    chipCount: chips.length
+  });
+
+  // Render chips with data attributes instead of inline onclick
+  el.innerHTML = chips.map((c, i) =>
+    `<button class="asha-chip" data-chip-index="${i}">${safeHtml(c.label)}</button>`
+  ).join('');
+  
+  // Add click listeners to each chip
+  el.querySelectorAll('.asha-chip').forEach((btn, i) => {
+    const question = chips[i].q.replace('{patientName}', patientName);
+    btn.addEventListener('click', () => ashaAskChip(question));
+  });
+  
+  console.log('✅ Asha chips rendered:', el.children.length, 'chips with click listeners');
+}
+
+function ashaAskChip(question) {
+  console.log('🎯 Asha chip clicked:', question);
+  console.log('📍 Active page:', document.querySelector('.page.active')?.id);
+  console.log('👤 Active profile ID:', activeHealthProfileId);
+  
+  // Always route to Care Chat if on health screen with active patient
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    console.log('✅ Opening Care Chat modal...');
+    // Open Netflix-style Care Chat modal
+    openCareChatModal();
+    setTimeout(() => {
+      const input = document.getElementById('care-chat-input');
+      console.log('🔍 Care chat input found:', !!input);
+      if (input) { 
+        input.value = question; 
+        console.log('📝 Sending query:', question);
+        sendCareChatQuery();
+      }
+    }, 300);
+  } else {
+    // For non-health screens: prompt user to select a patient first
+    console.log('⚠️ No active patient - redirecting to Health page');
+    showToast('Please select a patient from Health Records to use Asha AI');
+    goPage('page-health');
+  }
+}
+
+function ashaOpenWithQuery(q) {
+  const bar = document.getElementById('asha-bar');
+  const input = document.getElementById('asha-input');
+  const chips = document.getElementById('asha-chips');
+  const sendBtn = document.getElementById('asha-send-btn');
+  if (!input) return;
+  chips.style.display = 'none';
+  input.style.display = 'block';
+  sendBtn.style.display = 'block';
+  input.value = q || '';
+  input.focus();
+  bar.classList.add('typing');
+}
+
+function ashaCloseInput() {
+  const bar = document.getElementById('asha-bar');
+  const input = document.getElementById('asha-input');
+  const chips = document.getElementById('asha-chips');
+  const sendBtn = document.getElementById('asha-send-btn');
+  chips.style.display = 'flex';
+  input.style.display = 'none';
+  sendBtn.style.display = 'none';
+  bar.classList.remove('typing');
+}
+
+async function ashaSend() {
+  const input = document.getElementById('asha-input');
+  const q = input?.value?.trim();
+  if (!q) { ashaCloseInput(); return; }
+  ashaCloseInput();
+  
+  // Always route to Care Chat if on health screen with active patient
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    openCareChatModal();
+    setTimeout(() => {
+      const chatInput = document.getElementById('care-chat-input');
+      if (chatInput) { 
+        chatInput.value = q; 
+        sendCareChatQuery();
+      }
+    }, 300);
+  } else {
+    // For non-health screens: prompt user to select a patient first
+    showToast('Please select a patient from Health Records to use Asha AI');
+    goPage('page-health');
+  }
+}
+
+// Wire asha-input to show send button on type
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('asha-input');
+  if (input) {
+    input.addEventListener('input', () => {
+      const sendBtn = document.getElementById('asha-send-btn');
+      if (sendBtn) sendBtn.style.display = input.value.trim() ? 'block' : 'none';
+      // Auto-resize
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 80) + 'px';
+    });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ashaSend(); }
+      if (e.key === 'Escape') ashaCloseInput();
+    });
+  }
+  
+  // Initialize light mode toggle state
+  const toggle = document.getElementById('light-mode-toggle');
+  if (toggle) {
+    const savedTheme = LS.get('familyos_theme') || 'dark';
+    toggle.checked = savedTheme === 'light';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 2: VOICE INPUT WITH SMART INTENT DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+let _ashaRecognition = null;
+let _ashaListening = false;
+
+function ashaToggleMic() {
+  if (_ashaListening) { _stopMic(); return; }
+  _startMic();
+}
+
+function _startMic() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) { showToast('Voice not supported on this browser'); return; }
+
+  const btn = document.getElementById('asha-mic-btn');
+  if (btn) { btn.textContent = '🔴'; btn.title = 'Tap to stop'; }
+  _ashaListening = true;
+
+  _ashaRecognition = new SpeechRecognition();
+  _ashaRecognition.lang = 'en-IN';
+  _ashaRecognition.continuous = false;
+  _ashaRecognition.interimResults = false;
+
+  _ashaRecognition.onresult = async (event) => {
+    const transcript = event.results[0][0].transcript.trim();
+    _stopMic();
+    showToast('Heard: ' + transcript.slice(0, 50));
+    await _ashaProcessVoiceIntent(transcript);
+  };
+
+  _ashaRecognition.onerror = () => { _stopMic(); showToast('Could not hear clearly, try again'); };
+  _ashaRecognition.onend = () => _stopMic();
+  _ashaRecognition.start();
+}
+
+function _stopMic() {
+  _ashaListening = false;
+  const btn = document.getElementById('asha-mic-btn');
+  if (btn) { btn.textContent = '🎤'; btn.title = 'Speak'; }
+  try { _ashaRecognition?.stop(); } catch {}
+}
+
+async function _ashaProcessVoiceIntent(text) {
+  const lower = text.toLowerCase();
+
+  // INTENT: Log vitals — "blood pressure 120/80" "bp 120 over 80" "sugar 140"
+  const bpMatch = lower.match(/(?:bp|blood pressure)\s*(\d{2,3})[\/\s]+(\d{2,3})/);
+  const sugarMatch = lower.match(/(?:sugar|glucose|blood sugar)\s*(?:is\s*)?(\d{2,3})/);
+  const pulseMatch = lower.match(/(?:pulse|heart rate)\s*(?:is\s*)?(\d{2,3})/);
+  const weightMatch = lower.match(/(?:weight)\s*(?:is\s*)?(\d{2,3}(?:\.\d)?)\s*(?:kg)?/);
+  const tempMatch = lower.match(/(?:temp|temperature)\s*(?:is\s*)?(\d{2,3}(?:\.\d)?)/);
+
+  const hasVital = bpMatch || sugarMatch || pulseMatch || weightMatch || tempMatch;
+
+  if (hasVital && activeHealthProfileId) {
+    // Pre-fill vital modal and open
+    openAddVitalModal();
+    if (bpMatch) {
+      const s = document.getElementById('hv2-bp-s');
+      const d = document.getElementById('hv2-bp-d');
+      if (s) s.value = bpMatch[1];
+      if (d) d.value = bpMatch[2];
+    }
+    if (sugarMatch) { const el = document.getElementById('hv2-sugar'); if (el) el.value = sugarMatch[1]; }
+    if (pulseMatch) { const el = document.getElementById('hv2-pulse'); if (el) el.value = pulseMatch[1]; }
+    if (weightMatch) { const el = document.getElementById('hv2-weight'); if (el) el.value = weightMatch[1]; }
+    if (tempMatch) { const el = document.getElementById('hv2-temp'); if (el) el.value = tempMatch[1]; }
+    showToast('Vitals pre-filled — please confirm and save');
+    return;
+  }
+
+  // INTENT: Care note — "note: gave paracetamol" "log: papa ate well"
+  const noteMatch = lower.match(/^(?:note|log|record|note down)[:\s]+(.+)/i);
+  if (noteMatch && activeHealthProfileId) {
+    const noteText = noteMatch[1];
+    try {
+      const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
+      await addDoc(collection(db, `${base}/notes`), {
+        text: noteText, category: 'voice', date: todayStr(),
+        addedAt: serverTimestamp(), source: 'voice'
+      });
+      showToast('Care note saved ✓');
+      return;
+    } catch(e) { console.error(e); }
+  }
+
+  // INTENT: Add expense — "add expense 500 food" "spent 1200 medicine"
+  const expMatch = lower.match(/(?:add expense|spent|expense|paid)\s*(?:₹|rs\.?\s*)?(\d+(?:,\d+)?)/i);
+  if (expMatch) {
+    const amount = parseInt(expMatch[1].replace(',',''));
+    const input = document.getElementById('exp-amount');
+    if (input) { input.value = amount; openEditExpense(); }
+    showToast(`Expense ₹${amount} pre-filled`);
+    return;
+  }
+
+  // DEFAULT: Route to Asha chat
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    openCareChatModal();
+    setTimeout(() => {
+      const chatInput = document.getElementById('care-chat-input');
+      if (chatInput) { chatInput.value = text; sendCareChatQuery(); }
+    }, 300);
+  } else {
+    // Show the typed query in asha bar
+    ashaOpenWithQuery(text);
+  }
+}
+
+function ashaAttachFile() {
+  document.getElementById('asha-file-input')?.click();
+}
+
+async function ashaHandleAttachment(input) {
+  const file = input.files[0]; if (!file) return;
+  // Route: if on health screen → handle as report or prescription photo
+  const activePage = document.querySelector('.page.active')?.id;
+  if (activePage === 'page-health' && activeHealthProfileId) {
+    // Ask user what this is
+    const choice = await ashaAttachmentChoice();
+    if (choice === 'report') {
+      // Trigger report upload flow
+      const ri = document.getElementById('health-report-input');
+      if (ri) {
+        const dt = new DataTransfer(); dt.items.add(file);
+        ri.files = dt.files;
+        handleHealthReport(ri);
+        openModal('modal-health-report');
+      }
+    } else if (choice === 'prescription') {
+      const dt = new DataTransfer(); dt.items.add(file);
+      const medInput = document.getElementById('health-med-photo');
+      if (medInput) {
+        medInput.files = dt.files;
+        handleMedPhoto({ target: medInput });
+        openModal('modal-health-med');
+      }
+    } else if (choice === 'bill') {
+      const dt = new DataTransfer(); dt.items.add(file);
+      const billInput = document.getElementById('health-bill-photo');
+      if (billInput) {
+        billInput.files = dt.files;
+        handleBillPhoto({ target: billInput });
+        openModal('modal-health-bill');
+      }
+    }
+  }
+}
+
+function ashaAttachmentChoice() {
+  return new Promise(resolve => {
+    // Simple bottom sheet choice
+    const sheet = document.createElement('div');
+    sheet.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:var(--surface);border-top:1px solid var(--gold-border);border-radius:20px 20px 0 0;padding:20px;';
+    sheet.innerHTML = `
+      <div style="font-size:13px;color:var(--text-faint);margin-bottom:16px;text-align:center">What is this photo?</div>
+      ${['report','prescription','bill'].map(t =>
+        `<button onclick="document.body.removeChild(this.closest('div[style*=fixed]'));window._ashachoice('${t}')" 
+          style="width:100%;padding:14px;background:var(--card);border:1px solid var(--gold-border);border-radius:12px;margin-bottom:8px;color:var(--text);font-size:14px;cursor:pointer;">
+          ${{report:'📄 Medical Report',prescription:'💊 Prescription',bill:'🧾 Hospital Bill'}[t]}
+        </button>`
+      ).join('')}
+      <button onclick="document.body.removeChild(this.closest('div[style*=fixed]'));window._ashachoice(null)" 
+        style="width:100%;padding:14px;background:transparent;border:1px solid var(--gold-border);border-radius:12px;color:var(--text-dim);font-size:14px;cursor:pointer;">
+        Cancel
+      </button>
+    `;
+    window._ashachoice = resolve;
+    document.body.appendChild(sheet);
+  });
+}
+
+window.ashaAskChip = ashaAskChip;
+window.ashaSend = ashaSend;
+window.updateAshaChips = updateAshaChips;
+window.ashaToggleMic = ashaToggleMic;
+window.ashaAttachFile = ashaAttachFile;
+window.ashaHandleAttachment = ashaHandleAttachment;
+
+// ═══════════════════════════════════════════════════════════════
+// PHASE 3: AUDIO HEALTH BRIEF (World-First Feature)
+// ═══════════════════════════════════════════════════════════════
+
+let _audioBriefPlaying = false;
+let _audioBriefUtterance = null;
+
+async function playHealthBrief() {
+  if (!activeHealthProfileId) return;
+  if (_audioBriefPlaying) { stopHealthBrief(); return; }
+
+  const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
+  if (!p) return;
+
+  const btn = document.getElementById('btn-audio-brief');
+  if (btn) { btn.textContent = '⏳ Generating…'; btn.disabled = true; }
+
+  try {
+    // Build a rich context for the brief
+    const vitalsLatest = getLatestVitalSnapshot(activePatientData.vitals || []);
+    const markers = getKeyMarkers(activePatientData.reports, p.trackedMarkers).slice(0, 4);
+    const meds = (activePatientData.medications || []).filter(m => m.active !== false).slice(0, 4);
+    const todayDoses = activePatientData.doseLogs || [];
+
+    const context = `
+Patient: ${p.name}, ${p.relation}. Diagnosis: ${p.diagnosis}.
+Latest vitals: ${vitalsLatest ? `BP ${vitalsLatest.bp_systolic||'—'}/${vitalsLatest.bp_diastolic||'—'}, Pulse ${vitalsLatest.pulse||'—'}, SpO2 ${vitalsLatest.spo2||'—'}%` : 'no recent vitals'}.
+Key markers: ${markers.map(m => `${m.name} ${m.value} (${m.trend === 'down' ? 'improving' : m.trend === 'up' ? 'elevated' : 'stable'})`).join(', ') || 'none tracked'}.
+Active medications: ${meds.map(m => m.name).join(', ') || 'none'}.
+Doses taken today: ${todayDoses.length} of expected doses.
+Care summary: ${(p.aiSummary || 'not yet generated').slice(0, 200)}.
+    `.trim();
+
+    const prompt = `Create a warm, clear 45-second spoken health brief for a family caregiver. 
+Speak directly to them as "you". Start with the most important thing. 
+Include: overall status, one key marker trend, today's medication status, one thing to watch.
+End with an encouraging sentence. Keep it under 100 words. Plain sentences, no bullet points, no markdown.
+Context: ${context}`;
+
+    const script = await callClaudeHealth(prompt, context, true, LLM_MODELS.medicalQA, 200);
+
+    if (btn) { btn.textContent = '⏸ Stop'; btn.disabled = false; }
+    _audioBriefPlaying = true;
+
+    const synth = window.speechSynthesis;
+    _audioBriefUtterance = new SpeechSynthesisUtterance(script);
+    _audioBriefUtterance.lang = 'en-IN';
+    _audioBriefUtterance.rate = 0.9;
+    _audioBriefUtterance.pitch = 1.0;
+    
+    // Prefer a natural voice if available
+    const voices = synth.getVoices();
+    const preferred = voices.find(v => v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+      || voices.find(v => v.lang.startsWith('en'));
+    if (preferred) _audioBriefUtterance.voice = preferred;
+
+    _audioBriefUtterance.onend = () => {
+      _audioBriefPlaying = false;
+      if (btn) btn.textContent = '▶ Play Brief';
+    };
+    
+    synth.speak(_audioBriefUtterance);
+
+  } catch(e) {
+    console.error('Audio brief error:', e);
+    if (btn) { btn.textContent = '▶ Play Brief'; btn.disabled = false; }
+    showToast('Could not generate brief — check connection');
+  }
+}
+
+function stopHealthBrief() {
+  window.speechSynthesis?.cancel();
+  _audioBriefPlaying = false;
+  const btn = document.getElementById('btn-audio-brief');
+  if (btn) btn.textContent = '▶ Play Brief';
+}
+
+window.playHealthBrief = playHealthBrief;
+window.stopHealthBrief = stopHealthBrief;
+
 </script>
 </body>
 </html>

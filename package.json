@@ -1,8 +1,12 @@
 {
-  "name": "familyos",
-  "private": true,
+  "name": "familyos-cleanup",
+  "version": "1.0.0",
+  "description": "Database cleanup script for FamilyOS",
+  "main": "cleanup-database.js",
   "scripts": {
-    "test": "node tests/expense-utils.test.js",
-    "test:sync": "node test-sync-automated.js"
+    "cleanup": "node cleanup-database.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
   }
 }

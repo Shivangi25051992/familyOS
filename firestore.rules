@@ -2,52 +2,209 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // User document — each user can read/write their own doc (login bootstrap, setup, join)
-    match /users/{userId} {
-      allow read, write: if request.auth != null
-        && request.auth.uid == userId;
+    // ── HELPER FUNCTIONS ──────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Helper: user is a member (in members array OR in memberProfiles)
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // SECURITY: Use memberUids flat array for efficient membership check
     function isFamilyMember(familyId) {
       let fam = get(/databases/$(database)/documents/families/$(familyId)).data;
-      let members = fam != null ? fam.get('members', []) : [];
-      let memberProfiles = fam != null ? fam.get('memberProfiles', {}) : {};
-      return request.auth != null
+      // Check memberUids first (new field), fallback to members array (legacy)
+      let memberUids = fam != null ? fam.get('memberUids', fam.get('members', [])) : [];
+      return isSignedIn()
         && fam != null
-        && (request.auth.uid in members || request.auth.uid in memberProfiles);
+        && request.auth.uid in memberUids;
     }
 
-    // Family document — any authenticated user can read
-    // their own family doc (needed for login bootstrap)
+    function isFamilyOwner(familyId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/families/$(familyId))
+        && get(/databases/$(database)/documents/families/$(familyId)).data.primaryOwner == request.auth.uid;
+    }
+
+    // ── USER DOCUMENTS ────────────────────────────────────────────
+    // Each user can only read and write their own user doc.
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.uid == userId; // SECURITY: uid must match doc ID
+      allow update: if isOwner(userId)
+        && request.resource.data.uid == userId; // SECURITY: cannot change uid
+      allow delete: if false; // SECURITY: never delete user docs via client
+    }
+
+    // ── FAMILY DOCUMENTS ──────────────────────────────────────────
+    // Only members can read. Only owner can change membership/roles.
+
     match /families/{familyId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-        && request.auth.uid in request.resource.data.members;
-      allow update, delete: if request.auth != null
-        && request.auth.uid in resource.data.members;
+      allow read: if isFamilyMember(familyId);
 
-      // Subcollections — authenticated members only (members array OR memberProfiles)
-      match /expenses/{doc} {
-        allow read, write: if isFamilyMember(familyId);
+      allow create: if isSignedIn()
+        && request.resource.data.primaryOwner == request.auth.uid
+        && request.resource.data.memberUids.hasAll([request.auth.uid])
+        && request.resource.data.memberUids.size() == 1; // SECURITY: creator only on creation
+
+      allow update: if isFamilyMember(familyId)
+        // SECURITY: Members cannot change ownership
+        && request.resource.data.primaryOwner == resource.data.primaryOwner
+        // SECURITY: Only owner can change memberUids
+        && (request.resource.data.get('memberUids', []) == resource.data.get('memberUids', [])
+            || isFamilyOwner(familyId));
+
+      allow delete: if false; // SECURITY: never delete families via client
+
+      // ── SUBCOLLECTIONS ────────────────────────────────────────
+
+      match /expenses/{docId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId);
+        allow update: if isFamilyMember(familyId);
+        allow delete: if isFamilyMember(familyId)
+          && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
       }
 
-      match /tasks/{doc} {
-        allow read, write: if isFamilyMember(familyId);
+      match /tasks/{docId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId);
+        allow update: if isFamilyMember(familyId);
+        allow delete: if isFamilyMember(familyId)
+          && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
       }
 
-      match /reminders/{doc} {
-        allow read, write: if isFamilyMember(familyId);
+      match /reminders/{docId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId);
+        allow update: if isFamilyMember(familyId);
+        allow delete: if isFamilyMember(familyId)
+          && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
       }
 
-      match /autoExpenses/{doc} {
-        allow read, write: if isFamilyMember(familyId);
+      match /kidEvents/{docId} {
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId);
+        allow update: if isFamilyMember(familyId);
+        allow delete: if isFamilyMember(familyId)
+          && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
       }
+
+      match /autoExpenses/{docId} {
+        allow read: if isFamilyMember(familyId);
+        allow write: if isFamilyMember(familyId);
+      }
+
+      match /appLogs/{docId} {
+        allow read: if isFamilyOwner(familyId);
+        allow create: if isFamilyMember(familyId);
+        allow update, delete: if false;
+      }
+
+      // ── HEALTH PROFILES ────────────────────────────────────────
+      // Health data: stricter. Only family members can read.
 
       match /healthProfiles/{profileId} {
-        allow read, write: if isFamilyMember(familyId);
-        match /{subcollection}/{doc} {
-          allow read, write: if isFamilyMember(familyId);
+        allow read: if isFamilyMember(familyId);
+        allow create: if isFamilyMember(familyId)
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isFamilyMember(familyId);
+        allow delete: if isFamilyMember(familyId)
+          && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+
+        match /reports/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+          
+          // Additional pages for multi-page reports
+          match /pages/{pageId} {
+            allow read: if isFamilyMember(familyId);
+            allow create: if isFamilyMember(familyId);
+            allow delete: if isFamilyMember(familyId);
+          }
+        }
+
+        match /medications/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+        }
+
+        match /vitals/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+        }
+
+        match /doseLogs/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId);
+        }
+
+        match /visits/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+        }
+
+        match /bills/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+        }
+
+        match /timeline/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if false; // timeline is immutable
+          allow delete: if isFamilyOwner(familyId);
+        }
+
+        match /notes/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
+        }
+
+        match /chatHistory/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if false;
+          allow delete: if isFamilyOwner(familyId);
+        }
+
+        match /reminders/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId);
+        }
+        
+        match /symptoms/{docId} {
+          allow read: if isFamilyMember(familyId);
+          allow create: if isFamilyMember(familyId);
+          allow update: if isFamilyMember(familyId);
+          allow delete: if isFamilyMember(familyId)
+            && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
         }
       }
 
@@ -57,15 +214,111 @@ service cloud.firestore {
       }
     }
 
-    // Invitations — created by Cloud Function (createInvite); anyone with code can read; joiner or creator can update
-    match /invitations/{code} {
-      allow create: if false;
-      allow read: if true;
-      allow update: if request.auth != null
-        && (request.resource.data.used == true
-            || request.auth.uid == resource.data.createdBy);
-      allow delete: if request.auth != null
-        && request.auth.uid == resource.data.createdBy;
+    // ── SHARED HEALTH PROFILES (Collection Group) ────────────────
+    // Allows users to query all healthProfiles where they are in sharedWith array
+    match /{path=**}/healthProfiles/{profileId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in resource.data.get('sharedWith', []);
+    }
+    
+    // Subcollections of shared health profiles (must be separate rules)
+    match /{path=**}/healthProfiles/{profileId}/reports/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+      
+      // Multi-page report pages
+      match /pages/{pageId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+      }
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/medications/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/vitals/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/visits/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/bills/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/timeline/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/doseLogs/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/notes/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/chatHistory/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/reminders/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+    
+    match /{path=**}/healthProfiles/{profileId}/symptoms/{docId} {
+      allow read: if isSignedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/$(path)/healthProfiles/$(profileId)).data.get('sharedWith', []);
+    }
+
+    // ── INVITATIONS ───────────────────────────────────────────────
+    // Invitations can be read by anyone (needed to validate before login)
+    // Created by Cloud Function only (client cannot create)
+
+    match /invitations/{inviteId} {
+      allow read: if true; // SECURITY: must be readable before auth to join
+      allow create: if false; // SECURITY: only Cloud Function can create
+      allow update: if false; // SECURITY: immutable (Cloud Function marks as used)
+      allow delete: if isSignedIn()
+        && (resource.data.createdBy == request.auth.uid
+            || isFamilyOwner(resource.data.familyId));
+    }
+
+    // ── SHARED HEALTH ACCESS ──────────────────────────────────────
+    // Time-limited read-only health record sharing with non-members
+
+    match /sharedHealthAccess/{shareId} {
+      allow read: if true; // validated in app before showing data
+      allow create: if isSignedIn()
+        && request.resource.data.sharedBy == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.sharedBy == request.auth.uid;
+      allow delete: if isSignedIn()
+        && resource.data.sharedBy == request.auth.uid;
+    }
+
+    // ── APP LOGS ──────────────────────────────────────────────────
+    match /appLogs/{docId} {
+      allow read: if false; // only readable by Cloud Functions
+      allow create: if isSignedIn(); // any user can log crashes
+      allow update, delete: if false;
+    }
+
+    // ── DENY EVERYTHING ELSE ─────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

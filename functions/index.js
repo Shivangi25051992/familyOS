@@ -707,8 +707,20 @@ exports.syncGmailExpenses = onCall(
   async (request) => {
     const { fid, debug } = request.data || {};
     if (!fid) throw new Error("fid required");
-    await checkRateLimit(fid, "syncGmail", 60_000); // 1 call per minute per family
-    const result = await doSyncGmailExpenses(fid, { debug });
+
+    const uid = request.auth?.uid;
+    if (!uid) throw new Error("Unauthenticated");
+
+    const famSnap = await db.collection("families").doc(fid).get();
+    if (!famSnap.exists) throw new Error("Family not found");
+    const fam = famSnap.data();
+    if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
+
+    // Debug mode (returns raw email snippets) — primary owner only
+    const isPrimary = fam.primaryOwner === uid || fam.memberProfiles?.[uid]?.role === "primary";
+    const safeDebug = debug === true && isPrimary;
+
+    const result = await doSyncGmailExpenses(fid, { debug: safeDebug });
     return result;
   }
 );
@@ -910,18 +922,26 @@ exports.joinWithInviteCode = onCall({ cors: CORS_ORIGINS }, async (request) => {
   const displayName = request.auth?.token?.name || "Member";
   const email = request.auth?.token?.email || "";
 
+  const phoneNumber = request.auth?.token?.phone_number || null;
+
   const batch = db.batch();
   batch.set(db.collection("users").doc(uid), {
+    uid: uid, // SECURITY: Always include uid
     familyId: fid,
     role: "secondary",
     name: displayName,
     email,
+    phoneNumber: phoneNumber,
+    createdAt: FieldValue.serverTimestamp(),
+    lastLoginAt: FieldValue.serverTimestamp()
   });
   batch.update(famRef, {
     members: FieldValue.arrayUnion(uid),
+    memberUids: FieldValue.arrayUnion(uid), // SECURITY: Flat array for Firestore rules
     [`memberProfiles.${uid}`]: {
       name: displayName,
       email,
+      phoneNumber: phoneNumber,
       role: "secondary",
       emoji: "👩",
       uid,
@@ -942,7 +962,11 @@ exports.joinWithInviteCode = onCall({ cors: CORS_ORIGINS }, async (request) => {
       },
     },
   });
-  batch.update(invRef, { used: true, usedBy: uid });
+  batch.update(invRef, { 
+    used: true, 
+    usedBy: uid,
+    usedAt: FieldValue.serverTimestamp()
+  });
   await batch.commit();
 
   return { fid };
@@ -961,23 +985,66 @@ exports.createInvite = onCall({ cors: CORS_ORIGINS }, async (request) => {
 
   const fam = famSnap.data();
   const members = fam.members || [];
-  const isMember = members.includes(uid) || fam.memberProfiles?.[uid];
+  const memberUids = fam.memberUids || members;
+  const isMember = memberUids.includes(uid) || fam.memberProfiles?.[uid];
   if (!isMember) throw new Error("Not a member of this family");
+
+  // SECURITY: Only family owner can create invites
+  if (fam.primaryOwner !== uid) {
+    throw new Error("Only the family owner can create invites");
+  }
 
   const profileCount = Object.keys(fam.memberProfiles || {}).length;
   if (profileCount >= 5) throw new Error("Max 5 members reached");
 
-  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  // RATE LIMITING: Check for existing active invites
+  const now = Date.now();
+  const existingInvitesSnapshot = await db.collection("invitations")
+    .where("familyId", "==", fid)
+    .where("used", "==", false)
+    .where("expires", ">", now)
+    .get();
+
+  // If 3 or more active invites exist, return the most recent one instead of creating new
+  if (existingInvitesSnapshot.size >= 3) {
+    const mostRecent = existingInvitesSnapshot.docs
+      .sort((a, b) => (b.data().createdAt || 0) - (a.data().createdAt || 0))[0];
+    const existingCode = mostRecent.data().code;
+    console.log('Rate limit: Returning existing invite', existingCode, 'instead of creating new');
+    return { 
+      code: existingCode,
+      isExisting: true,
+      message: "Using existing invite (max 3 active at once)"
+    };
+  }
+
+  // Generate unique code
+  let code;
+  let attempts = 0;
+  do {
+    code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const existing = await db.collection("invitations").doc(code).get();
+    if (!existing.exists) break;
+    attempts++;
+  } while (attempts < 5);
+
+  if (attempts >= 5) throw new Error("Could not generate unique code");
+
+  // Create new invitation
   await db.collection("invitations").doc(code).set({
     familyId: fid,
     code,
     createdBy: uid,
-    expires: Date.now() + 86400000,
+    createdByName: request.auth?.token?.name || "Owner",
+    createdAt: FieldValue.serverTimestamp(),
+    expires: now + 86400000, // 24 hours
     used: false,
+    usedBy: null,
+    usedAt: null,
     familyName: fam.name || "Family",
   });
 
-  return { code };
+  return { code, isExisting: false };
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1103,59 +1170,11 @@ exports.disconnectGmail = onCall(
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FUNCTION: parseReceiptOCR — server-side OCR proxy for expense receipts
-// Replaces direct browser→Anthropic calls in parseReceiptWithOCR() and parsePastedText()
+// FUNCTION 6: healthAIRaw — server-side proxy for health text AI calls
+// Moves Anthropic API key off the client; validates family membership first.
 // ─────────────────────────────────────────────────────────────────────────────
-exports.parseReceiptOCR = onCall(
-  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY] },
-  async (request) => {
-    const { fid, base64Image, mediaType, pastedText } = request.data || {};
-    if (!fid) throw new Error("fid required");
-    if (!base64Image && !pastedText) throw new Error("base64Image or pastedText required");
-
-    const uid = request.auth?.uid;
-    if (!uid) throw new Error("Unauthenticated");
-
-    const famSnap = await db.collection("families").doc(fid).get();
-    if (!famSnap.exists) throw new Error("Family not found");
-
-    const fam = famSnap.data();
-    const isMember = (fam.members || []).includes(uid) || fam.memberProfiles?.[uid];
-    if (!isMember) throw new Error("Not a member of this family");
-
-    await checkRateLimit(fid, "parseReceiptOCR", 10_000); // 1 call per 10s per family
-
-    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
-    const prompt = 'Extract expense details. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.';
-
-    let messages;
-    if (base64Image) {
-      messages = [{ role: "user", content: [
-        { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: base64Image } },
-        { type: "text", text: prompt },
-      ]}];
-    } else {
-      messages = [{ role: "user", content: `Parse this pasted text for expense details. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.\n\n${pastedText.slice(0, 2000)}` }];
-    }
-
-    const msg = await anthropic.messages.create({
-      model: LLM_MODELS.receiptOcr,
-      max_tokens: 256,
-      messages,
-    });
-
-    const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    return { result: jsonMatch ? JSON.parse(jsonMatch[0]) : null };
-  }
-);
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FUNCTION: healthAskAI — server-side Claude text proxy for health Q&A
-// Replaces direct browser→Anthropic calls in callClaudeHealth()
-// ─────────────────────────────────────────────────────────────────────────────
-exports.healthAskAI = onCall(
-  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY] },
+exports.healthAIRaw = onCall(
+  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 60 },
   async (request) => {
     const { fid, prompt, context, isCompassionatePersona, model } = request.data || {};
     if (!fid || !prompt) throw new Error("fid and prompt required");
@@ -1165,74 +1184,201 @@ exports.healthAskAI = onCall(
 
     const famSnap = await db.collection("families").doc(fid).get();
     if (!famSnap.exists) throw new Error("Family not found");
-
     const fam = famSnap.data();
-    const isMember = (fam.members || []).includes(uid) || fam.memberProfiles?.[uid];
-    if (!isMember) throw new Error("Not a member of this family");
+    if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
 
-    await checkRateLimit(fid, "healthAskAI", 30_000); // 1 call per 30s per family
+    const anthropicKey = ANTHROPIC_API_KEY.value();
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
+
+    // Allowlist models — never let the client specify an arbitrary model string
+    const ALLOWED_HEALTH_MODELS = [
+      "claude-sonnet-4-20250514",
+      "claude-haiku-4-5-20251001",
+    ];
+    const safeModel = ALLOWED_HEALTH_MODELS.includes(model)
+      ? model
+      : "claude-sonnet-4-20250514";
 
     const systemPrompt = isCompassionatePersona
-      ? "You are a compassionate medical information assistant helping an Indian family caregiver understand their family member's medical condition. Answer questions clearly and compassionately in simple language. ALWAYS recommend consulting the treating doctor for any treatment decisions. Be honest about uncertainty. Avoid jargon. Answer in the same language the question is asked (Hindi or English)."
-      : "You are a medical data summarizer. Be concise, clear, and compassionate.";
+      ? `You are a compassionate medical information assistant helping an Indian family caregiver understand their family member's medical condition. Answer questions clearly and compassionately in simple language. ALWAYS recommend consulting the treating doctor for any treatment decisions. Be honest about uncertainty. Use simple language, avoid jargon. Answer in the same language the question is asked (Hindi or English).`
+      : `You are a medical data summarizer. Be concise, clear, and compassionate.`;
 
-    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
-    const safeModel = model || "claude-haiku-4-5-20251001";
-
-    const msg = await anthropic.messages.create({
+    const response = await anthropic.messages.create({
       model: safeModel,
       max_tokens: 1000,
       system: systemPrompt + (context ? `\n\nContext:\n${context}` : ""),
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
-    return { text };
+    return { text: response.content[0].text };
   }
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FUNCTION: analyzeHealthMedia — server-side Claude vision proxy
-// Replaces direct browser→Anthropic calls in callClaudeVision()
+// FUNCTION 7: healthAnalyzeImageRaw — server-side proxy for health vision calls
+// Moves Anthropic API key off the client; validates family membership first.
 // ─────────────────────────────────────────────────────────────────────────────
-exports.analyzeHealthMedia = onCall(
-  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY] },
+exports.healthAnalyzeImageRaw = onCall(
+  { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 60, memory: "512MiB" },
   async (request) => {
-    const { fid, base64Image, mediaType, systemPrompt, userPrompt, model } = request.data || {};
-    if (!fid || !base64Image || !systemPrompt || !userPrompt) {
-      throw new Error("fid, base64Image, systemPrompt, and userPrompt required");
-    }
+    const { fid, system, prompt, base64NoPrefix, model } = request.data || {};
+    if (!fid || !base64NoPrefix) throw new Error("fid and base64NoPrefix required");
 
     const uid = request.auth?.uid;
     if (!uid) throw new Error("Unauthenticated");
 
     const famSnap = await db.collection("families").doc(fid).get();
     if (!famSnap.exists) throw new Error("Family not found");
-
     const fam = famSnap.data();
-    const isMember = (fam.members || []).includes(uid) || fam.memberProfiles?.[uid];
-    if (!isMember) throw new Error("Not a member of this family");
+    if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
 
-    await checkRateLimit(fid, "analyzeHealthMedia", 30_000); // 1 call per 30s per family
+    const anthropicKey = ANTHROPIC_API_KEY.value();
+    const anthropic = new Anthropic({ apiKey: anthropicKey });
 
-    const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY.value() });
-    const safeModel = model || "claude-sonnet-4-20250514";
-    const safeMediaType = mediaType || "image/jpeg";
+    const ALLOWED_HEALTH_MODELS = [
+      "claude-sonnet-4-20250514",
+      "claude-haiku-4-5-20251001",
+    ];
+    const safeModel = ALLOWED_HEALTH_MODELS.includes(model)
+      ? model
+      : "claude-sonnet-4-20250514";
 
-    const msg = await anthropic.messages.create({
+    const response = await anthropic.messages.create({
       model: safeModel,
       max_tokens: 2000,
-      system: systemPrompt,
+      system: system || "You are a helpful medical data assistant.",
       messages: [{
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: safeMediaType, data: base64Image } },
-          { type: "text", text: userPrompt },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/jpeg", data: base64NoPrefix },
+          },
+          { type: "text", text: prompt || "Analyze this image." },
         ],
       }],
     });
 
-    const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
-    return { text };
+    return { text: response.content[0].text };
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION 8: lookupUserByEmail — Find user UID by email for health record sharing
+// Server-side function with admin access to query users collection
+// ─────────────────────────────────────────────────────────────────────────────
+exports.lookupUserByEmail = onCall(
+  { cors: CORS_ORIGINS },
+  async (request) => {
+    const { email } = request.data || {};
+    
+    // Validate input
+    if (!email || typeof email !== 'string') {
+      throw new Error('Email is required');
+    }
+    
+    // Validate requester is authenticated
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new Error('Unauthenticated');
+    }
+    
+    // Normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      throw new Error('Invalid email format');
+    }
+    
+    try {
+      // Query users collection by email
+      const usersSnapshot = await db.collection('users')
+        .where('email', '==', normalizedEmail)
+        .limit(1)
+        .get();
+      
+      if (usersSnapshot.empty) {
+        return {
+          found: false,
+          message: 'No user found with this email'
+        };
+      }
+      
+      const userDoc = usersSnapshot.docs[0];
+      const userData = userDoc.data();
+      
+      return {
+        found: true,
+        uid: userDoc.id,
+        name: userData.name || userData.displayName || userData.email,
+        email: userData.email
+      };
+      
+    } catch (error) {
+      console.error('Error looking up user:', error);
+      throw new Error('Failed to lookup user: ' + error.message);
+    }
+  }
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION 9: lookupUserByPhone — Find user UID by phone number for health record sharing
+// Server-side function with admin access to query users collection
+// ─────────────────────────────────────────────────────────────────────────────
+exports.lookupUserByPhone = onCall(
+  { cors: CORS_ORIGINS },
+  async (request) => {
+    const { phoneNumber } = request.data || {};
+    
+    // Validate input
+    if (!phoneNumber || typeof phoneNumber !== 'string') {
+      throw new Error('Phone number is required');
+    }
+    
+    // Validate requester is authenticated
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new Error('Unauthenticated');
+    }
+    
+    // Normalize phone number (remove spaces, dashes)
+    const normalizedPhone = phoneNumber.trim().replace(/[\s\-\(\)]/g, '');
+    
+    // Validate phone format (should start with +)
+    if (!normalizedPhone.startsWith('+')) {
+      throw new Error('Phone number must include country code (e.g., +91 9876543210)');
+    }
+    
+    try {
+      // Query users collection by phoneNumber
+      const usersSnapshot = await db.collection('users')
+        .where('phoneNumber', '==', normalizedPhone)
+        .limit(1)
+        .get();
+      
+      if (usersSnapshot.empty) {
+        return {
+          found: false,
+          message: 'No user found with this phone number'
+        };
+      }
+      
+      const userDoc = usersSnapshot.docs[0];
+      const userData = userDoc.data();
+      
+      return {
+        found: true,
+        uid: userDoc.id,
+        name: userData.name || userData.displayName || userData.phoneNumber,
+        phoneNumber: userData.phoneNumber,
+        email: userData.email || null
+      };
+      
+    } catch (error) {
+      console.error('Error looking up user by phone:', error);
+      throw new Error('Failed to lookup user: ' + error.message);
+    }
   }
 );
