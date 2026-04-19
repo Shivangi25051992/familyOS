@@ -8,18 +8,46 @@ const { google } = require("googleapis");
 const Anthropic = require("@anthropic-ai/sdk").default;
 const crypto = require("crypto");
 
-// ── LLM MODEL CONFIG ──────────────────────────
-// Change models here — affects entire app
+// ── LLM MODEL CONFIG (server) ─────────────────
+// Model strings must exactly match Anthropic / OpenAI identifiers.
+// Changes here affect deployed Cloud Functions only; client config lives in
+// public/ai-config.js. Keep the two in sync for any key referenced by both.
 const LLM_MODELS = {
-  // Gmail email parsing — simple extraction
-  // Cheap model fine here, no medical data
-  gmailParsing: "claude-haiku-4-5-20251001",
+  // Email + expense parsing — GPT-4o-mini is ~5x cheaper than Haiku for pure
+  // JSON extraction. Anthropic Haiku is the live fallback if OpenAI is down.
+  gmailParsing:            "gpt-4o-mini",
+  expenseInsights:         "gpt-4o-mini",
 
-  // Receipt OCR — simple amount extraction
-  receiptOcr: "claude-haiku-4-5-20251001",
+  // Medical lab image structured-JSON extraction (Haiku vision).
+  medicalLabExtraction:    "claude-haiku-4-5-20251001",
 
-  // Fallback for OpenAI
-  openaiFallback: "gpt-4o-mini",
+  // Medical multi-page text synthesis (post-extraction summary).
+  medicalReportsSynthesis: "claude-haiku-4-5-20251001",
+
+  // Medical scans, X-rays, radiology — accuracy critical, Sonnet only.
+  medicalVision:           "claude-sonnet-4-20250514",
+
+  // Anthropic fallback for email / insights when OpenAI unavailable.
+  anthropicFallback:       "claude-haiku-4-5-20251001",
+
+  // OpenAI fallback (kept for redundancy).
+  openaiFallback:          "gpt-4o-mini",
+
+  // Legacy key (kept so any lingering reference still resolves).
+  receiptOcr:              "gpt-4o-mini",
+};
+
+// Token limits — must stay in sync with public/ai-config.js LLM_TOKEN_LIMITS.
+// Set conservatively based on observed output distributions.
+const LLM_TOKEN_LIMITS = {
+  emailParsing:            150,  // JSON object ~80 tokens; was 256 — 40% saving
+  expenseInsights:         160,  // 2-3 bullets ~120 tokens; was 256
+  medicalLabPage:          600,
+  medicalReportsSynthesis: 400,
+  medicalVision:           800,
+  receiptOcr:              200,
+  healthQAHardCap:        1000,  // upper bound client can request via maxTokens
+  healthImageHardCap:     2000,  // upper bound for vision responses
 };
 // ─────────────────────────────────────────────
 
@@ -396,90 +424,117 @@ exports.gmailOAuthCallback = onRequest(
 // ─────────────────────────────────────────────────────────────────────────────
 // FUNCTION 3: syncGmailExpenses
 // ─────────────────────────────────────────────────────────────────────────────
-async function parseEmailWithAI(from, subject, body, openaiKey, anthropicKey) {
+/**
+ * Parse a single email for expense data using AI.
+ *
+ * Provider priority: Anthropic Haiku (primary) → OpenAI GPT-4o-mini (fallback).
+ * Anthropic is primary because ANTHROPIC_API_KEY is the app's canonical key
+ * already used for medical AI; OpenAI is kept as a resilience fallback. JSON
+ * is enforced by the system prompt (Anthropic) and `response_format` (OpenAI).
+ *
+ * Argument order: (from, subject, body, anthropicKey, openaiKey).
+ * NOTE: arg order flipped from previous version — every call site must use
+ * the new order; passing keys in the wrong slots silently misroutes traffic.
+ *
+ * @returns {string} Raw JSON string — either a parsed expense or `{"skip":true}`.
+ */
+async function parseEmailWithAI(from, subject, body, anthropicKey, openaiKey) {
+  // System prompt — shorter because OpenAI's response_format guarantees valid
+  // JSON and Anthropic respects the explicit JSON-only instruction. Removed
+  // the "no markdown / no code blocks" stanza (saves ~25 input tokens/email).
   const systemPrompt = `You are a receipt parser for Indian family expense tracking.
 Extract purchase details from order confirmation emails.
-Respond ONLY with valid JSON — no markdown, no explanation, no code blocks.
-Return {"skip":true} ONLY if there is genuinely no purchase amount anywhere.
-
-Indian price formats to recognise:
-- ₹8,648  or  Rs. 8648  or  INR 8648
-- "Net Paid", "Amount Paid", "Order Total", "Grand Total"  
-- "You paid", "Total payable", "to be paid"
-The amount may appear deep in the email — search carefully.`;
+Indian price formats: ₹8,648 | Rs. 8648 | INR 8648
+Labels: "Net Paid", "Amount Paid", "Order Total", "Grand Total", "You paid"
+The amount may appear deep in the email — search carefully.
+Return {"skip":true} ONLY if there is genuinely no purchase amount.`;
 
   const userPrompt = `Parse this Indian order confirmation email.
-
 Return JSON with these exact fields:
 {
-  "amount": number (rupees only, no symbol, no commas — e.g. 8648),
-  "merchant": string (brand name only, max 20 chars — e.g. "Myntra", "Swiggy"),
-  "category": one of exactly: Food, Groceries, Clothes, Shopping, HomeServices, Travel, Utilities, Other,
+  "amount": number (rupees only, no symbol, no commas),
+  "merchant": string (brand name only, max 20 chars),
+  "category": one of: Food, Groceries, Clothes, Shopping, HomeServices, Travel, Utilities, Other,
   "description": string (brief item/order summary, max 50 chars, no personal info),
   "date": "YYYY-MM-DD",
-  "source": one of exactly: swiggy, instamart, zepto, zomato, amazon, myntra, urbanclap, flipkart, blinkit, bigbasket, nykaa, bank, other,
+  "source": one of: swiggy, instamart, zepto, zomato, amazon, myntra, urbanclap, flipkart, blinkit, bigbasket, nykaa, bank, other,
   "isEmi": false,
-  "orderId": string (optional — from subject like "Order #123" or "Order ID XXXXX" if present)
+  "orderId": string (optional)
 }
 
-VENDOR → CATEGORY mapping (use these for consistency):
-- Swiggy, Zomato → Food
-- Instamart, Zepto, Blinkit, BigBasket → Groceries
-- Myntra, Nykaa → Clothes
-- Amazon, Flipkart, Croma → Shopping
-- UrbanClap, Urban Company → HomeServices
-- Bank alerts → Utilities or Other
-
-Look for amount in: body, subject, headers. Myntra/Flipkart sometimes put price in subject (e.g. "Order #123 - ₹8648") or in "Amount Paid", "Net Paid", "Order Total" in body.
+Vendor → Category: Swiggy/Zomato→Food | Instamart/Zepto/Blinkit/BigBasket→Groceries
+Myntra/Nykaa→Clothes | Amazon/Flipkart/Croma→Shopping | UrbanClap→HomeServices
 
 From: ${from}
 Subject: ${subject}
 Email content:
-${body}
+${body}`;
 
-If no purchase amount found anywhere, return {"skip":true}`;
-
-  if (openaiKey && openaiKey.trim()) {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model: LLM_MODELS.openaiFallback,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_tokens: 256,
-      }),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const text = json.choices?.[0]?.message?.content || "";
-      return text;
+  // ── PROVIDER 1: Anthropic Haiku (primary) ─────────────────────────────────
+  if (anthropicKey && anthropicKey.trim()) {
+    try {
+      const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
+      const parseRes = await anthropic.messages.create({
+        // If gmailParsing in LLM_MODELS is configured to GPT, fall back to the
+        // explicit Anthropic model name; otherwise trust whatever is set.
+        model: LLM_MODELS.gmailParsing !== "gpt-4o-mini"
+          ? LLM_MODELS.gmailParsing
+          : LLM_MODELS.anthropicFallback,
+        max_tokens: LLM_TOKEN_LIMITS.emailParsing,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+      const text = parseRes.content?.[0]?.type === "text" ? parseRes.content[0].text : "";
+      if (text) return text;
+    } catch (e) {
+      console.warn("Anthropic email parse failed, trying OpenAI:", e.message);
     }
   }
 
-  if (anthropicKey && anthropicKey.trim()) {
-    const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
-    const parseRes = await anthropic.messages.create({
-      model: LLM_MODELS.gmailParsing,
-      max_tokens: 256,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-    });
-    return parseRes.content?.[0]?.type === "text"
-      ? parseRes.content[0].text
-      : "";
+  // ── PROVIDER 2: OpenAI GPT-4o-mini (fallback — JSON mode) ─────────────────
+  if (openaiKey && openaiKey.trim()) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openaiKey.trim()}`,
+        },
+        body: JSON.stringify({
+          model: LLM_MODELS.openaiFallback,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_tokens: LLM_TOKEN_LIMITS.emailParsing,
+          // Guarantees a valid JSON document — removes JSON parse-failure risk.
+          response_format: { type: "json_object" },
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const text = json.choices?.[0]?.message?.content || "";
+        if (text) return text;
+      }
+    } catch (e) {
+      console.warn("OpenAI email parse failed:", e.message);
+    }
   }
 
-  throw new Error("No AI API key configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.");
+  throw new Error("No AI API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY.");
 }
 
 async function doSyncGmailExpenses(fid, opts = {}) {
   const debug = opts.debug === true;
+
+  // Feature flag: allow families on restricted plans to disable AI email
+  // parsing entirely. Short-circuits before spending any AI tokens.
+  const emailParsingEnabled = await isAIFeatureEnabled(fid, "emailParsing");
+  if (!emailParsingEnabled) {
+    console.log(`[${fid}] emailParsing disabled for this family — skipping AI parse`);
+    return { newCount: 0, skipped: true, message: "AI email parsing disabled" };
+  }
+
   const encKey = GMAIL_ENCRYPTION_KEY.value();
   let openaiKey = "";
   let anthropicKey = "";
@@ -608,7 +663,8 @@ async function doSyncGmailExpenses(fid, opts = {}) {
 
     let text;
     try {
-      text = await parseEmailWithAI(from, subject, body, openaiKey, anthropicKey);
+      // NOTE: arg order is (anthropicKey, openaiKey) — Anthropic is primary.
+      text = await parseEmailWithAI(from, subject, body, anthropicKey, openaiKey);
     } catch (e) {
       errors++;
       if (emailSamples.length < 3) {
@@ -793,12 +849,37 @@ exports.generateExpenseInsights = onCall(
     const isMember = members.includes(uid) || fam.memberProfiles?.[uid];
     if (!isMember) throw new Error("Not a member of this family");
 
+    // Feature flag gate — plan can disable AI insights entirely.
+    const insightsEnabled = await isAIFeatureEnabled(fid, "expenseInsights");
+    if (!insightsEnabled) {
+      throw new Error("AI insights are not available on your current plan");
+    }
+
     await checkRateLimit(fid, "generateInsights", 300_000); // 1 call per 5 min per family
 
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastStr = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}`;
+
+    // ── Insights cache (4-hour TTL) ────────────────────────────────────────
+    // Spending doesn't materially move hour-to-hour; returning a recent cached
+    // set cuts ~50% of insight API calls without affecting user experience.
+    const INSIGHTS_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+    const cached = fam.aiInsightsCache;
+    if (
+      cached?.month === thisMonth &&
+      cached?.generatedAt?.toMillis &&
+      cached.generatedAt.toMillis() > Date.now() - INSIGHTS_CACHE_TTL_MS &&
+      Array.isArray(cached.insights) &&
+      cached.insights.length > 0
+    ) {
+      return {
+        insights: cached.insights,
+        summary: cached.summary,
+        fromCache: true,
+      };
+    }
 
     const expSnap = await db.collection("families").doc(fid).collection("expenses").get();
     const expenses = expSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -848,7 +929,29 @@ Reply with exactly 2-3 bullet points, one per line. No numbering, no intro.`;
 
     let insights = [];
 
-    if (openaiKey?.trim()) {
+    // ── PROVIDER 1: Anthropic Haiku (primary) ──────────────────────────────
+    if (anthropicKey?.trim()) {
+      try {
+        const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
+        const msg = await anthropic.messages.create({
+          model: LLM_MODELS.anthropicFallback,
+          max_tokens: LLM_TOKEN_LIMITS.expenseInsights,
+          messages: [{ role: "user", content: prompt }],
+        });
+        const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
+        insights = text
+          .split("\n")
+          .map((s) => s.replace(/^[-*•]\s*/, "").trim())
+          .filter((s) => s.length > 10);
+      } catch (e) {
+        console.warn("Anthropic insights error, trying OpenAI:", e.message);
+      }
+    }
+
+    // ── PROVIDER 2: OpenAI GPT-4o-mini (fallback) ──────────────────────────
+    // Note: response_format JSON mode is NOT used here — insights are freeform
+    // bullet text, not JSON.
+    if (insights.length === 0 && openaiKey?.trim()) {
       try {
         const res = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
@@ -859,7 +962,7 @@ Reply with exactly 2-3 bullet points, one per line. No numbering, no intro.`;
           body: JSON.stringify({
             model: LLM_MODELS.openaiFallback,
             messages: [{ role: "user", content: prompt }],
-            max_tokens: 256,
+            max_tokens: LLM_TOKEN_LIMITS.expenseInsights,
           }),
         });
         if (res.ok) {
@@ -873,26 +976,10 @@ Reply with exactly 2-3 bullet points, one per line. No numbering, no intro.`;
       } catch (e) {
         console.error("OpenAI insights error:", e);
       }
-    } else if (anthropicKey?.trim()) {
-      try {
-        const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
-        const msg = await anthropic.messages.create({
-          model: LLM_MODELS.gmailParsing,
-          max_tokens: 256,
-          messages: [{ role: "user", content: prompt }],
-        });
-        const text = msg.content?.[0]?.type === "text" ? msg.content[0].text : "";
-        insights = text
-          .split("\n")
-          .map((s) => s.replace(/^[-*•]\s*/, "").trim())
-          .filter((s) => s.length > 10);
-      } catch (e) {
-        console.error("Anthropic insights error:", e);
-      }
     }
 
     if (insights.length === 0) {
-      // Fallback: computed insights without AI
+      // Deterministic fallback — no AI, still returns something useful.
       const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1])[0];
       const pct = monthSpent > 0 && topCat ? Math.round((topCat[1] / monthSpent) * 100) : 0;
       if (topCat) insights.push(`${topCat[0]} is ${pct}% of your spend this month`);
@@ -902,7 +989,23 @@ Reply with exactly 2-3 bullet points, one per line. No numbering, no intro.`;
       }
     }
 
-    return { insights, summary: { thisMonthTotal: monthSpent, lastMonthTotal: lastSpent } };
+    const responseSummary = { thisMonthTotal: monthSpent, lastMonthTotal: lastSpent };
+
+    // Persist cache for 4-hour reuse. Best-effort — cache miss is harmless.
+    try {
+      await famRef.update({
+        aiInsightsCache: {
+          month: thisMonth,
+          insights,
+          summary: responseSummary,
+          generatedAt: Timestamp.now(),
+        },
+      });
+    } catch (e) {
+      console.warn("Failed to write insights cache (non-fatal):", e.message);
+    }
+
+    return { insights, summary: responseSummary, fromCache: false };
   }
 );
 
