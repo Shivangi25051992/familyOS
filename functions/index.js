@@ -113,6 +113,24 @@ const SOURCE_TO_CATEGORY = {
   axis: "Utilities",
 };
 
+// ── RATE LIMITING ─────────────────────────────
+// Per-family throttle stored in Firestore _rateLimits subcollection.
+// Only Cloud Functions can write this subcollection (rules deny client access).
+async function checkRateLimit(fid, key, minIntervalMs) {
+  const ref = db.collection("families").doc(fid).collection("_rateLimits").doc(key);
+  const snap = await ref.get();
+  const now = Date.now();
+  if (snap.exists) {
+    const lastCallAt = snap.data().lastCallAt?.toMillis?.() || 0;
+    if (now - lastCallAt < minIntervalMs) {
+      const waitSec = Math.ceil((minIntervalMs - (now - lastCallAt)) / 1000);
+      throw new Error(`Rate limited — try again in ${waitSec}s`);
+    }
+  }
+  await ref.set({ lastCallAt: Timestamp.fromMillis(now) }, { merge: true });
+}
+// ─────────────────────────────────────────────
+
 function getSourceFromSender(fromAddr) {
   const lower = (fromAddr || "").toLowerCase();
   for (const [source, addrs] of Object.entries(SENDER_MAP)) {
@@ -753,6 +771,8 @@ exports.generateExpenseInsights = onCall(
     const members = fam.members || [];
     const isMember = members.includes(uid) || fam.memberProfiles?.[uid];
     if (!isMember) throw new Error("Not a member of this family");
+
+    await checkRateLimit(fid, "generateInsights", 300_000); // 1 call per 5 min per family
 
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

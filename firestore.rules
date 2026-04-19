@@ -207,6 +207,11 @@ service cloud.firestore {
             && (resource.data.createdBy == request.auth.uid || isFamilyOwner(familyId));
         }
       }
+
+      // Rate limit state — written only by Cloud Functions (server-side admin SDK bypasses rules)
+      match /_rateLimits/{doc} {
+        allow read, write: if false;
+      }
     }
 
     // ── SHARED HEALTH PROFILES (Collection Group) ────────────────

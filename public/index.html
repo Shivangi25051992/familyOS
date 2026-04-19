@@ -1262,7 +1262,7 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <div class="sec-hdr"><div class="sec-title">Health & Care</div></div>
       <div id="health-profiles-list"></div>
       <div class="empty-action" style="padding:20px;text-align:center">
-        <button class="btn-primary" onclick="openModal('modal-add-patient')">+ Add Patient</button>
+        <button class="btn-primary" onclick="openModal('modal-add-patient')">+ Add Health Profile</button>
       </div>
     </div>
 
@@ -1279,6 +1279,8 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
           <button class="btn-sm" id="health-patient-share-btn" onclick="openShareHealthModal()" style="display:none;padding:6px 12px;font-size:12px">🔗</button>
           <button class="edit-btn" id="health-patient-delete-btn" onclick="deleteHealthProfile()" style="display:none;font-size:18px;padding:4px">✕</button>
         </div>
+        <button class="btn-sm" id="health-patient-share-btn" onclick="openShareHealthModal()" style="display:none;margin-right:8px">🔗 Share</button>
+        <button class="edit-btn" id="health-patient-delete-btn" onclick="deleteHealthProfile()" style="display:none;font-size:16px">✕</button>
       </div>
       
       <div class="chip-row" id="health-tabs" style="overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none">
@@ -1685,6 +1687,32 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
       <div style="margin-top:10px"><span class="tag tg" id="mu-role">—</span></div>
     </div>
     <button class="btn-primary danger" onclick="doSignOut()">Sign Out</button>
+  </div>
+</div>
+
+<!-- DOCTOR SUMMARY MODAL -->
+<div class="modal-overlay" id="modal-doctor-summary">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📋 Doctor Summary <button class="modal-close" onclick="closeModal('modal-doctor-summary')">✕</button></div>
+    <div id="doctor-summary-content" style="flex:1;overflow-y:auto;font-size:13px;line-height:1.7;color:var(--text-dim);margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px;flex-shrink:0">
+      <button class="btn-primary" style="flex:1" onclick="copyDoctorSummary()">📋 Copy</button>
+      <button class="btn-sm fill" style="flex:1" onclick="shareDoctorSummary()">↗ Share</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEALTH PDF EXPORT MODAL -->
+<div class="modal-overlay" id="modal-health-pdf">
+  <div class="modal" style="max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📄 Health Report <button class="modal-close" onclick="closeModal('modal-health-pdf')">✕</button></div>
+    <div id="health-pdf-content" style="flex:1;overflow-y:auto;font-size:12px;line-height:1.7;color:var(--text-dim);margin-bottom:16px"></div>
+    <div style="display:flex;gap:10px;flex-shrink:0">
+      <button class="btn-primary" style="flex:1" onclick="copyHealthPDF()">📋 Copy</button>
+      <button class="btn-sm fill" style="flex:1" onclick="shareHealthPDF()">↗ Share</button>
+    </div>
   </div>
 </div>
 
@@ -11184,52 +11212,18 @@ window.logEmiPayment=async()=>{
 };
 
 // TODO: Move OCR/parse API calls to Cloud Function before public launch.
-function getOcrConfig(){
-  const c=window.FAMILYOS_OCR_CONFIG||{};
-  const p=c.provider||'openai';
-  const k=p==='openai'?(c.openaiKey||''):(c.anthropicKey||'');
-  return {provider:p,key:k};
-}
-
+// OCR via Cloud Function — no API keys in browser
 async function parseReceiptWithOCR(dataUrl){
-  const {provider,key}=getOcrConfig(); if(!key) return null;
-  if(provider==='openai'){
-    try{
-      const res=await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,
-          messages:[{role:'user',content:[
-            {type:'image_url',image_url:{url:dataUrl}},
-            {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
-          ]}]})
-      });
-      if(!res.ok) return null;
-      const json=await res.json();
-      const text=json.choices?.[0]?.message?.content||'';
-      const match=text.match(/\{[\s\S]*\}/);
-      if(!match) return null;
-      return JSON.parse(match[0]);
-    }catch(e){ console.warn('OpenAI OCR failed',e); return null; }
+  if(!FID || !functions) return null;
+  try {
+    const fn = httpsCallable(functions, 'parseReceiptOCR');
+    const res = await fn({ fid: FID, dataUrl });
+    return res.data || null;
+  } catch(e) {
+    console.warn('Receipt OCR failed', e);
+    if (e.code === 'resource-exhausted') showToast('Too many scans — wait 10 seconds');
+    return null;
   }
-  const m=dataUrl.match(/^data:image\/(\w+);base64,(.+)$/); if(!m) return null;
-  const mediaType='image/'+(m[1]==='jpeg'?'jpeg':'png');
-  const base64Data=m[2];
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,
-        messages:[{role:'user',content:[
-          {type:'image',source:{type:'base64',media_type:mediaType,data:base64Data}},
-          {type:'text',text:'Extract expense details from this receipt. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.'}
-        ]}]})
-    });
-    if(!res.ok) return null;
-    const json=await res.json();
-    const text=json.content?.[0]?.text||'';
-    const match=text.match(/\{[\s\S]*\}/);
-    if(!match) return null;
-    return JSON.parse(match[0]);
-  }catch(e){ console.warn('Anthropic OCR failed',e); return null; }
 }
 
 window.handleExpensePaste=async e=>{
@@ -11246,36 +11240,17 @@ window.handleExpensePaste=async e=>{
   }
 };
 
+// Pasted text parsing via Cloud Function — no API keys in browser
 async function parsePastedText(text){
-  const {provider,key}=getOcrConfig(); if(!key) return null;
-  if(!text||text.length<10) return null;
-  const prompt=`Parse this pasted text (e.g. from WhatsApp) for expense details. Reply with JSON only: {"amount":number,"description":"string","vendor":"string"}. Amount in INR. If unclear use null.\n\n${text.slice(0,2000)}`;
-  if(provider==='openai'){
-    try{
-      const res=await fetch('https://api.openai.com/v1/chat/completions',{
-        method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body:JSON.stringify({model:LLM_MODELS.openaiOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
-      });
-      if(!res.ok) return null;
-      const json=await res.json();
-      const out=json.choices?.[0]?.message?.content||'';
-      const match=out.match(/\{[\s\S]*\}/);
-      if(!match) return null;
-      return JSON.parse(match[0]);
-    }catch(e){ console.warn('OpenAI parse failed',e); return null; }
+  if(!FID || !functions || !text || text.length < 10) return null;
+  try {
+    const fn = httpsCallable(functions, 'parseReceiptOCR');
+    const res = await fn({ fid: FID, pastedText: text });
+    return res.data || null;
+  } catch(e) {
+    console.warn('Paste parse failed', e);
+    return null;
   }
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST', headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:LLM_MODELS.receiptOcr,max_tokens:256,messages:[{role:'user',content:prompt}]})
-    });
-    if(!res.ok) return null;
-    const json=await res.json();
-    const out=json.content?.[0]?.text||'';
-    const match=out.match(/\{[\s\S]*\}/);
-    if(!match) return null;
-    return JSON.parse(match[0]);
-  }catch(e){ console.warn('Anthropic parse failed',e); return null; }
 }
 
 window.handlePhoto=async input=>{
