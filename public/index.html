@@ -7872,7 +7872,7 @@ Recent visits: ${visits.map(v => `[${v.date}] ${v.notes}`).join(' | ') || 'None'
   const prompt = `Summarize the current status in 4-6 short bullet points. Use a short heading, mention the most recent report date, and highlight key risks or follow-ups. Be compassionate and clear.`;
 
   try {
-    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalReports, 550);
+    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalReportsSynthesis, LLM_TOKEN_LIMITS.generateAISummary);
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummary: summary, aiSummaryUpdatedAt: serverTimestamp(), aiSummaryStale: false, updatedAt: serverTimestamp() });
     document.getElementById('health-ai-summary-text').innerHTML = formatChatResponse(summary);
   } catch(e) { console.error(e); showToast('AI error'); }
@@ -7906,8 +7906,16 @@ async function askHealthAI(profileId, question) {
   return await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, 700);
 }
 
-async function callClaudeHealth(prompt, context, isCompassionatePersona = false, model = LLM_MODELS.medicalQA, maxTokens = 1000) {
-  // PHASE 12: Using Cloud Functions for secure API calls
+async function callClaudeHealth(
+  prompt,
+  context,
+  isCompassionatePersona = false,
+  model = LLM_MODELS.medicalQA,
+  maxTokens = LLM_TOKEN_LIMITS.healthQA
+) {
+  // PHASE 12: Cloud Function proxies the Anthropic call so the API key never
+  // leaves the server. `maxTokens` is passed through so the server can enforce
+  // a tight per-call cap (see LLM_TOKEN_LIMITS.healthQAHardCap for the ceiling).
   try {
     const healthAIRaw = httpsCallable(functions, 'healthAIRaw');
     const result = await healthAIRaw({
@@ -7915,7 +7923,8 @@ async function callClaudeHealth(prompt, context, isCompassionatePersona = false,
       prompt,
       context,
       isCompassionatePersona,
-      model
+      model,
+      maxTokens,
     });
     return result.data.text;
   } catch (error) {
@@ -8891,7 +8900,7 @@ async function parseVitalsFromImage(file) {
   });
   const system = 'You are a medical OCR assistant. CRITICAL: Preserve exact decimal values. 91.1 must NOT be read as 97 or 91. 98.6°F must NOT become 99°F. Read every digit individually. Return temperatureUnit as "F" or "C". Plausible ranges: temp 85-110°F, SpO2 50-100%, pulse 20-250bpm. If a value seems implausible, return it anyway with a "suspicious:true" flag.';
   const prompt = 'Extract vital signs from this document. Return ONLY valid JSON with these keys (include only found values): bp_systolic, bp_diastolic, pulse, spo2, temperature, temperatureUnit, weight, bloodSugar, perfusionIndex, respirationRate, rawText. Example: {"bp_systolic":120,"bp_diastolic":80,"pulse":72,"spo2":98,"temperature":98.6,"temperatureUnit":"F","perfusionIndex":2.1,"respirationRate":18}';
-  const text = await callClaudeVision(system, prompt, base64NoPrefix);
+  const text = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
   const result = safeParseJSON(text);
   if(!result) return null;
   const out = result;
@@ -9263,7 +9272,7 @@ Respond with JSON only. No markdown. No explanation.`;
         const pagePrompt = `Analyse page ${i+1} of ${allImages.length} of this medical report for a patient with ${p.diagnosis}. Extract all test results, findings, and key information. ${prompt}`;
         
         try {
-          const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalReports);
+          const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
           const pageData = safeParseJSON(res);
           if (pageData) allAnalyses.push(pageData);
         } catch(e) {
@@ -9298,7 +9307,7 @@ Instructions:
 Return ONLY the summary text, no JSON.`;
 
         try {
-          const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+          const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReportsSynthesis, LLM_TOKEN_LIMITS.medicalReportSynthesis);
           reportData.aiSummary = comprehensiveSummary;
           reportData.summary = comprehensiveSummary;
         } catch (e) {
@@ -9340,7 +9349,7 @@ Return ONLY the summary text, no JSON.`;
           }
           
           try {
-            const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalReports);
+            const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
             const pageData = safeParseJSON(res);
             if (pageData) allAnalyses.push(pageData);
           } catch(e) {
@@ -9375,7 +9384,7 @@ Instructions:
 Return ONLY the summary text, no JSON.`;
 
           try {
-            const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+            const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReportsSynthesis, LLM_TOKEN_LIMITS.medicalReportSynthesis);
             reportData.aiSummary = comprehensiveSummary;
             reportData.summary = comprehensiveSummary;
           } catch (e) {
@@ -9400,7 +9409,7 @@ Return ONLY the summary text, no JSON.`;
         
       } else {
         // Single page - analyze as before
-        const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalReports);
+        const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
         reportData = safeParseJSON(res);
         
         if (!reportData) {
@@ -9676,8 +9685,23 @@ async function confirmSaveReport() {
   finally { isSavingReport = false; }
 }
 
-// PHASE 12: Using Cloud Functions for secure image analysis
-async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODELS.medicalReports) {
+// PHASE 12 + cost optimisation: Cloud Function proxies the Anthropic vision
+// call. Pass an `imageType` so the server can pick the cheapest safe model:
+//   'lab'  → Haiku  (lab reports — structured JSON extraction)
+//   'bill' → Haiku  (bill amount + date extraction)
+//   'scan' → Sonnet (X-rays, radiology — accuracy critical)
+//   'med'  → Haiku  (medication label / prescription photo)
+// The `model` default is kept as medicalVision (Sonnet) for backwards-compat
+// with any legacy caller; typed callers should pass the explicit model for
+// their use case plus the matching imageType.
+async function callClaudeVision(
+  system,
+  prompt,
+  base64NoPrefix,
+  model = LLM_MODELS.medicalVision,
+  imageType = 'lab',
+  maxTokens = undefined
+) {
   try {
     const healthAnalyzeImageRaw = httpsCallable(functions, 'healthAnalyzeImageRaw');
     const result = await healthAnalyzeImageRaw({
@@ -9685,7 +9709,9 @@ async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODE
       system,
       prompt,
       base64NoPrefix,
-      model
+      model,
+      imageType,
+      maxTokens,
     });
     return result.data.text;
   } catch (error) {
@@ -9814,7 +9840,7 @@ async function handleHealthBillPhoto(input) {
   try {
     const base64NoPrefix = await compressReportImage(file);
     const system = `You are a medical bill reader. Extract: amount (number), date (YYYY-MM-DD), hospital (string), category ('consultation'|'medicine'|'test'|'procedure'). Return JSON only.`;
-    const res = await callClaudeVision(system, "Extract bill details", base64NoPrefix, LLM_MODELS.receiptOcr);
+    const res = await callClaudeVision(system, "Extract bill details", base64NoPrefix, LLM_MODELS.receiptOcr, 'bill', LLM_TOKEN_LIMITS.receiptOcr);
     const b = safeParseJSON(res);
     if (!b) { showToast('Could not read bill format'); return; }
     document.getElementById('hb-date').value = b.date || todayStr();
@@ -10452,7 +10478,7 @@ EXAMPLES OF OPTIONAL MEDICATIONS:
 - Anti-nausea meds marked "if vomiting"
 
 Return ONLY the JSON array, no other text.`;
-    const res = await callClaudeVision(system, "Extract medications", base64NoPrefix, LLM_MODELS.medicationParse);
+    const res = await callClaudeVision(system, "Extract medications", base64NoPrefix, LLM_MODELS.medicationParse, 'med', LLM_TOKEN_LIMITS.medicationParse);
     const meds = safeParseJSON(res);
     if(Array.isArray(meds) && meds.length) {
       pendingMedReview = meds;

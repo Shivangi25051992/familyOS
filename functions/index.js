@@ -1300,7 +1300,7 @@ exports.disconnectGmail = onCall(
 exports.healthAIRaw = onCall(
   { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 60 },
   async (request) => {
-    const { fid, prompt, context, isCompassionatePersona, model } = request.data || {};
+    const { fid, prompt, context, isCompassionatePersona, model, maxTokens } = request.data || {};
     if (!fid || !prompt) throw new Error("fid and prompt required");
 
     const uid = request.auth?.uid;
@@ -1311,17 +1311,33 @@ exports.healthAIRaw = onCall(
     const fam = famSnap.data();
     if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
 
+    // Server-side flag gate — any family can disable health Q&A remotely.
+    const healthQAEnabled = await isAIFeatureEnabled(fid, "healthQA");
+    if (!healthQAEnabled) throw new Error("AI health assistant is not available on your plan");
+
     const anthropicKey = ANTHROPIC_API_KEY.value();
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
-    // Allowlist models — never let the client specify an arbitrary model string
+    // Allowlist models — never let the client specify an arbitrary model string.
+    // Default is now Haiku; client can still escalate to Sonnet per-call when
+    // a higher-stakes question warrants it (e.g. doctor summary review).
     const ALLOWED_HEALTH_MODELS = [
-      "claude-sonnet-4-20250514",
       "claude-haiku-4-5-20251001",
+      "claude-sonnet-4-20250514",
     ];
     const safeModel = ALLOWED_HEALTH_MODELS.includes(model)
       ? model
-      : "claude-sonnet-4-20250514";
+      : "claude-haiku-4-5-20251001";
+
+    // Respect client-supplied maxTokens within a hard cap. Clients should set
+    // this to their actual expected output size (e.g. 200 for audio brief,
+    // 1200 for doctor summary) — a tighter cap saves output-token cost and
+    // latency on every call.
+    const tokenCap = LLM_TOKEN_LIMITS.healthQAHardCap; // 1000
+    const safeMaxTokens = Math.max(
+      50,
+      Math.min(Number(maxTokens) || 700, tokenCap)
+    );
 
     const systemPrompt = isCompassionatePersona
       ? `You are a compassionate medical information assistant helping an Indian family caregiver understand their family member's medical condition. Answer questions clearly and compassionately in simple language. ALWAYS recommend consulting the treating doctor for any treatment decisions. Be honest about uncertainty. Use simple language, avoid jargon. Answer in the same language the question is asked (Hindi or English).`
@@ -1329,7 +1345,7 @@ exports.healthAIRaw = onCall(
 
     const response = await anthropic.messages.create({
       model: safeModel,
-      max_tokens: 1000,
+      max_tokens: safeMaxTokens,
       system: systemPrompt + (context ? `\n\nContext:\n${context}` : ""),
       messages: [{ role: "user", content: prompt }],
     });
@@ -1345,7 +1361,7 @@ exports.healthAIRaw = onCall(
 exports.healthAnalyzeImageRaw = onCall(
   { cors: CORS_ORIGINS, secrets: [ANTHROPIC_API_KEY], timeoutSeconds: 60, memory: "512MiB" },
   async (request) => {
-    const { fid, system, prompt, base64NoPrefix, model } = request.data || {};
+    const { fid, system, prompt, base64NoPrefix, model, imageType, maxTokens } = request.data || {};
     if (!fid || !base64NoPrefix) throw new Error("fid and base64NoPrefix required");
 
     const uid = request.auth?.uid;
@@ -1356,20 +1372,40 @@ exports.healthAnalyzeImageRaw = onCall(
     const fam = famSnap.data();
     if (!fam.members?.includes(uid) && !fam.memberProfiles?.[uid]) throw new Error("Not a member");
 
+    // Server-side flag gate for image analysis — this is the premium / opt-in
+    // tier for free-plan families (scans can be costly on Sonnet).
+    const imageEnabled = await isAIFeatureEnabled(fid, "medicalImageAnalysis");
+    if (!imageEnabled) throw new Error("Image analysis is not available on your plan");
+
     const anthropicKey = ANTHROPIC_API_KEY.value();
     const anthropic = new Anthropic({ apiKey: anthropicKey });
 
-    const ALLOWED_HEALTH_MODELS = [
-      "claude-sonnet-4-20250514",
+    // Model routing by imageType:
+    //   'scan' → Sonnet (radiology / X-ray / complex imagery — accuracy critical)
+    //   'lab'  → Haiku  (structured text extraction from lab reports)
+    //   'bill' → Haiku  (amount + date extraction)
+    //   other  → Haiku  (safe default)
+    // Client may still pass an explicit `model` to override; the allow-list
+    // prevents arbitrary strings from reaching the Anthropic API.
+    const ALLOWED_VISION_MODELS = [
       "claude-haiku-4-5-20251001",
+      "claude-sonnet-4-20250514",
     ];
-    const safeModel = ALLOWED_HEALTH_MODELS.includes(model)
-      ? model
-      : "claude-sonnet-4-20250514";
+    const typeDefaultModel = (imageType === "scan")
+      ? "claude-sonnet-4-20250514"
+      : "claude-haiku-4-5-20251001";
+    const safeModel = ALLOWED_VISION_MODELS.includes(model) ? model : typeDefaultModel;
+
+    // Respect client-supplied maxTokens within a hard cap.
+    const tokenCap = LLM_TOKEN_LIMITS.healthImageHardCap; // 2000
+    const safeMaxTokens = Math.max(
+      100,
+      Math.min(Number(maxTokens) || 2000, tokenCap)
+    );
 
     const response = await anthropic.messages.create({
       model: safeModel,
-      max_tokens: 2000,
+      max_tokens: safeMaxTokens,
       system: system || "You are a helpful medical data assistant.",
       messages: [{
         role: "user",
@@ -1383,7 +1419,7 @@ exports.healthAnalyzeImageRaw = onCall(
       }],
     });
 
-    return { text: response.content[0].text };
+    return { text: response.content[0].text, modelUsed: safeModel };
   }
 );
 
