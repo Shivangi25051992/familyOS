@@ -1,3 +1,64 @@
+/* eslint-disable max-len */
+// ═════════════════════════════════════════════════════════════════════════════
+// FamilyOS — Cloud Functions entry point
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// ─── SECRET / API-KEY MANAGEMENT ─────────────────────────────────────────────
+// All third-party API keys are stored in Firebase Secret Manager and injected
+// at runtime via defineSecret(). Never hard-code keys, never commit them to the
+// repo, and never read them from .env files in production.
+//
+//   Secret name            | Used by                                    | Rotation
+//   -----------------------+--------------------------------------------+------------------
+//   GOOGLE_CLIENT_ID       | Gmail OAuth (gmailAuthUrl, OAuth callback) | manual (GCP console)
+//   GOOGLE_CLIENT_SECRET   | Gmail OAuth (gmailAuthUrl, OAuth callback) | manual (GCP console)
+//   GMAIL_ENCRYPTION_KEY   | encrypt/decrypt Gmail refresh tokens        | rotate = re-auth
+//   ANTHROPIC_API_KEY      | parseEmailWithAI, healthAIRaw,              | rotate any time
+//                          | healthAnalyzeImageRaw, generateExpenseInsights |
+//   OPENAI_API_KEY         | parseEmailWithAI fallback,                  | rotate any time
+//                          | generateExpenseInsights fallback           |
+//
+// ─── HOW TO ROTATE A KEY ─────────────────────────────────────────────────────
+//   1.  Create new key in the provider console (Anthropic / OpenAI / GCP).
+//   2.  Push it to Firebase:
+//         firebase functions:secrets:set ANTHROPIC_API_KEY
+//       Paste the key value at the prompt; enter returns a new version.
+//   3.  Redeploy so functions pick up the new version:
+//         firebase deploy --only functions
+//   4.  Revoke the old key in the provider console.
+//   5.  Never `firebase functions:secrets:access <name>` in shared terminals.
+//
+// ─── LLM MODEL MATRIX (cost per 1M tokens, input/output, approx Apr 2026) ────
+//
+//   Task                         | Model                       | In / Out   | Why
+//   -----------------------------+-----------------------------+------------+----------------------
+//   Email / order parsing        | gpt-4o-mini                 | $0.15/$0.60| JSON mode, cheapest
+//     (fallback)                 | claude-haiku-4-5-20251001   | $1.00/$5.00| Anthropic when OpenAI down
+//   Expense insights             | gpt-4o-mini                 | $0.15/$0.60| same JSON extraction class
+//     (fallback)                 | claude-haiku-4-5-20251001   | $1.00/$5.00|
+//   Medical lab extraction       | claude-haiku-4-5-20251001   | $1.00/$5.00| 5x cheaper than Sonnet
+//   Medical report synthesis     | claude-haiku-4-5-20251001   | $1.00/$5.00| multi-page text synthesis
+//   Medical Q&A (Care Chat etc.) | claude-haiku-4-5-20251001   | $1.00/$5.00| routed via healthAIRaw
+//   Audio brief                  | claude-haiku-4-5-20251001   | $1.00/$5.00| short narrative output
+//   Doctor summary               | claude-haiku-4-5-20251001   | $1.00/$5.00| structured summary
+//   Medication voice parse       | claude-haiku-4-5-20251001   | $1.00/$5.00| short JSON
+//   Visit-note action items      | claude-haiku-4-5-20251001   | $1.00/$5.00| short bullets
+//   Medical scans / X-ray / rads | claude-sonnet-4-20250514    | $3.00/$15.0| accuracy critical
+//   Bill OCR (client-side)       | claude-haiku-4-5-20251001   | $1.00/$5.00| Anthropic vision only
+//
+// The authoritative source for these assignments is functions/ai-helpers.js
+// (server) and public/ai-config.js (client). Keep the two in sync when you
+// touch any key referenced by both sides.
+//
+// ─── FEATURE FLAGS ───────────────────────────────────────────────────────────
+// Every AI-calling Cloud Function checks isAIFeatureEnabled(fid, flag) before
+// spending money. Flags live in families/{fid}.aiFeatures (overrides) and
+// families/{fid}.plan (determines defaults). Premium flags are OFF by default
+// on the free plan — see PREMIUM_FLAGS in ai-helpers.js. Client-side UI also
+// guards calls (public/index.html → getAIFeatureFlags) so users get clear
+// messaging rather than an opaque 403.
+// ═════════════════════════════════════════════════════════════════════════════
+
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { defineSecret } = require("firebase-functions/params");
