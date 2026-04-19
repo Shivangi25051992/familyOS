@@ -8,48 +8,14 @@ const { google } = require("googleapis");
 const Anthropic = require("@anthropic-ai/sdk").default;
 const crypto = require("crypto");
 
-// ── LLM MODEL CONFIG (server) ─────────────────
-// Model strings must exactly match Anthropic / OpenAI identifiers.
-// Changes here affect deployed Cloud Functions only; client config lives in
-// public/ai-config.js. Keep the two in sync for any key referenced by both.
-const LLM_MODELS = {
-  // Email + expense parsing — GPT-4o-mini is ~5x cheaper than Haiku for pure
-  // JSON extraction. Anthropic Haiku is the live fallback if OpenAI is down.
-  gmailParsing:            "gpt-4o-mini",
-  expenseInsights:         "gpt-4o-mini",
-
-  // Medical lab image structured-JSON extraction (Haiku vision).
-  medicalLabExtraction:    "claude-haiku-4-5-20251001",
-
-  // Medical multi-page text synthesis (post-extraction summary).
-  medicalReportsSynthesis: "claude-haiku-4-5-20251001",
-
-  // Medical scans, X-rays, radiology — accuracy critical, Sonnet only.
-  medicalVision:           "claude-sonnet-4-20250514",
-
-  // Anthropic fallback for email / insights when OpenAI unavailable.
-  anthropicFallback:       "claude-haiku-4-5-20251001",
-
-  // OpenAI fallback (kept for redundancy).
-  openaiFallback:          "gpt-4o-mini",
-
-  // Legacy key (kept so any lingering reference still resolves).
-  receiptOcr:              "gpt-4o-mini",
-};
-
-// Token limits — must stay in sync with public/ai-config.js LLM_TOKEN_LIMITS.
-// Set conservatively based on observed output distributions.
-const LLM_TOKEN_LIMITS = {
-  emailParsing:            150,  // JSON object ~80 tokens; was 256 — 40% saving
-  expenseInsights:         160,  // 2-3 bullets ~120 tokens; was 256
-  medicalLabPage:          600,
-  medicalReportsSynthesis: 400,
-  medicalVision:           800,
-  receiptOcr:              200,
-  healthQAHardCap:        1000,  // upper bound client can request via maxTokens
-  healthImageHardCap:     2000,  // upper bound for vision responses
-};
-// ─────────────────────────────────────────────
+// LLM model names, token limits, and the pure feature-flag resolver all live
+// in a side-effect-free module so the unit tests can require them without
+// pulling in firebase-admin / firebase-functions.
+const {
+  LLM_MODELS,
+  LLM_TOKEN_LIMITS,
+  resolveFeatureFlag: _resolveFeatureFlag,
+} = require("./ai-helpers");
 
 initializeApp();
 const db = getFirestore();
@@ -60,16 +26,10 @@ const db = getFirestore();
 // Reads families/{fid}.aiFeatures and families/{fid}.plan.
 // Returns true (enabled) by default; fails open — never silently breaks prod.
 // ─────────────────────────────────────────────────────────────────────────────
-const _PREMIUM_FLAGS = ["medicalImageAnalysis", "doctorSummary", "audioBrief"];
 async function isAIFeatureEnabled(fid, flag) {
   try {
     const snap = await db.collection("families").doc(fid).get();
-    const fam = snap.data() || {};
-    const overrides = fam.aiFeatures || {};
-    if (fam.plan === "free" && _PREMIUM_FLAGS.includes(flag)) {
-      return overrides[flag] ?? false;
-    }
-    return overrides[flag] ?? true;
+    return _resolveFeatureFlag(snap.data(), flag);
   } catch {
     return true;
   }
@@ -1542,3 +1502,4 @@ exports.lookupUserByPhone = onCall(
     }
   }
 );
+
