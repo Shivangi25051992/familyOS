@@ -5457,6 +5457,12 @@ window.sendCareChatQuery = async function() {
     return;
   }
   
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) {
+    showToast('AI health assistant is not available on your current plan');
+    return;
+  }
+  
   // Clear input
   input.value = '';
   
@@ -5467,10 +5473,11 @@ window.sendCareChatQuery = async function() {
   addCareChatMessage('assistant', '...', true);
   
   try {
-    // Call existing askHealthAI function
     const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
     const context = buildHealthChatContext(p);
-    const answer = await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, 800);
+    // Care Chat gets a slightly higher token budget than plain Q&A to allow
+    // richer compassionate answers; still bounded by healthQAHardCap on server.
+    const answer = await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, LLM_TOKEN_LIMITS.careChatExtended);
     
     // Remove loading message
     const historyEl = document.getElementById('care-chat-history');
@@ -7774,6 +7781,9 @@ async function sendHealthChat() {
   const q = input?.value?.trim();
   if(!q || !activeHealthProfileId) return;
 
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) { showToast('AI health assistant is not available on your plan'); return; }
+
   input.value = '';
   input.style.height = 'auto';
   btn.disabled = true;
@@ -7828,7 +7838,7 @@ async function sendHealthChat() {
 
   try {
     const context = buildHealthChatContext(p);
-    const answer = await callClaudeHealth(q, context, true, LLM_MODELS.medicalQA, 700);
+    const answer = await callClaudeHealth(q, context, true, LLM_MODELS.medicalQA, LLM_TOKEN_LIMITS.healthQA);
     const aiMsg = { role: 'ai', text: answer, t: Date.now() };
     _healthChatHistory.push(aiMsg);
     
@@ -7848,6 +7858,8 @@ async function sendHealthChat() {
 // ══ AI FUNCTIONS ══
 async function generateAISummary() {
   if(!activeHealthProfileId) return;
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) { showToast('AI summary is not available on your plan'); return; }
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   const lastUpdated = getTimestampMillis(p.aiSummaryUpdatedAt);
   const recentlyUpdated = lastUpdated && (Date.now() - lastUpdated) < 6 * 60 * 60 * 1000;
@@ -7884,6 +7896,9 @@ async function handleHealthAsk() {
   const q = input.value.trim();
   if(!q) return;
 
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) { showToast('AI Q&A is not available on your plan'); return; }
+
   const btn = document.getElementById('btn-health-ask');
   btn.disabled = true; btn.textContent = 'Thinking...';
 
@@ -7903,7 +7918,7 @@ async function handleHealthAsk() {
 async function askHealthAI(profileId, question) {
   const profile = data.healthProfiles.find(x => x.id === profileId);
   const context = buildHealthChatContext(profile);
-  return await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, 700);
+  return await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, LLM_TOKEN_LIMITS.healthQA);
 }
 
 async function callClaudeHealth(
@@ -9702,6 +9717,11 @@ async function callClaudeVision(
   imageType = 'lab',
   maxTokens = undefined
 ) {
+  const flags = await getAIFeatureFlags();
+  if (!flags.medicalImageAnalysis) {
+    showToast('Image analysis is not available on your current plan');
+    throw new Error('medicalImageAnalysis disabled');
+  }
   try {
     const healthAnalyzeImageRaw = httpsCallable(functions, 'healthAnalyzeImageRaw');
     const result = await healthAnalyzeImageRaw({
@@ -9822,9 +9842,18 @@ async function saveVisit() {
   if(!date || !hospital) return;
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
-    const res = await callClaudeHealth(`Extract 3-5 key action items from these visit notes. Return as a JSON array of strings. Notes: ${notes}`, `Patient with ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).diagnosis}`, false, LLM_MODELS.visitNotes);
-    let actionItems = safeParseJSON(res);
-    if (!actionItems) actionItems = [res];
+    // Action-item extraction is an opt-in flag — if disabled, save visit
+    // without AI-derived items. The visit itself is still saved so the
+    // feature flag never blocks the core care-tracking workflow.
+    const flags = await getAIFeatureFlags();
+    let actionItems = [];
+    if (flags.visitNotesAI && notes) {
+      try {
+        const res = await callClaudeHealth(`Extract 3-5 key action items from these visit notes. Return as a JSON array of strings. Notes: ${notes}`, `Patient with ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).diagnosis}`, false, LLM_MODELS.visitNotes, LLM_TOKEN_LIMITS.visitNotes);
+        actionItems = safeParseJSON(res);
+        if (!actionItems) actionItems = [res];
+      } catch (e) { console.warn('visit notes AI failed, saving without items:', e.message); }
+    }
     
     await addDoc(collection(db, `${base}/visits`), { date, hospital, doctor, type, notes, actionItems, nextVisit: next, addedAt: serverTimestamp() });
     await addDoc(collection(db, `${base}/timeline`), { date, type: 'visit', title: `${type.toUpperCase()} at ${hospital}`, detail: notes.slice(0, 100), addedAt: serverTimestamp() });
@@ -10021,6 +10050,9 @@ async function deleteVital(vitalId) {
 async function generateDoctorSummary() {
   if(!activeHealthProfileId) return;
   
+  const flags = await getAIFeatureFlags();
+  if (!flags.doctorSummary) { showToast('Doctor summary is not available on your plan'); return; }
+  
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   const medications = activePatientData.medications.filter(m => m.active !== false);
   const reports = activePatientData.reports.slice(0, 10);
@@ -10042,7 +10074,7 @@ async function generateDoctorSummary() {
   const prompt = `Generate a clear, professional medical summary for a new doctor who has never seen this patient before. Format with markdown headings and bullet points. Include: diagnosis & timeline, current medications with dosages, recent test results with key findings, recent symptoms, current status, and key concerns/recommendations.`;
   
   try {
-    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalQA, 1200);
+    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.doctorSummary, LLM_TOKEN_LIMITS.doctorSummary);
     
     // Render summary in modal
     modalContent.innerHTML = `
@@ -10288,9 +10320,11 @@ function exportHealthPDF() {
 }
 
 async function parseMedVoice(transcript) {
+  const flags = await getAIFeatureFlags();
+  if (!flags.medicationParse) { showToast('Medication parsing is not available on your plan'); return; }
   showToast('Parsing...');
   try {
-    const res = await callClaudeHealth(`Extract medication details: name, dose, frequency, timing, durationDays (number), startDate (YYYY-MM-DD if stated), notes. Return JSON only. Text: ${transcript}`, "Parsing med voice", false, LLM_MODELS.medicationParse, 500);
+    const res = await callClaudeHealth(`Extract medication details: name, dose, frequency, timing, durationDays (number), startDate (YYYY-MM-DD if stated), notes. Return JSON only. Text: ${transcript}`, "Parsing med voice", false, LLM_MODELS.medicationParse, LLM_TOKEN_LIMITS.medicationParse);
     const m = safeParseJSON(res);
     if (!m) return;
     clearMedReview();
@@ -10436,6 +10470,10 @@ window.saveAllMedsFromReview = async function(){
 
 async function handleMedPhoto(input) {
   const file = input.files[0]; if(!file) return;
+  
+  const flags = await getAIFeatureFlags();
+  if (!flags.medicationParse) { showToast('Medication parsing is not available on your plan'); return; }
+  if (!flags.medicalImageAnalysis) { showToast('Image analysis is not available on your plan'); return; }
   
   // Show loading indicator in modal
   const singleFields = document.getElementById('med-single-fields');
@@ -10587,6 +10625,8 @@ function renderInsights(){
 window.fetchAIInsights=async function(){
   if(!FID||!functions) return;
   const btn=document.getElementById('btn-ai-insights');
+  const flags = await getAIFeatureFlags();
+  if (!flags.expenseInsights) { showToast('AI insights are not available on your plan'); return; }
   if(btn){ btn.disabled=true; btn.textContent='Thinking...'; }
   try{
     const genInsights=httpsCallable(functions,'generateExpenseInsights');
@@ -11851,6 +11891,9 @@ async function playHealthBrief() {
   if (!activeHealthProfileId) return;
   if (_audioBriefPlaying) { stopHealthBrief(); return; }
 
+  const flags = await getAIFeatureFlags();
+  if (!flags.audioBrief) { showToast('Audio brief is not available on your plan'); return; }
+
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if (!p) return;
 
@@ -11879,7 +11922,7 @@ Include: overall status, one key marker trend, today's medication status, one th
 End with an encouraging sentence. Keep it under 100 words. Plain sentences, no bullet points, no markdown.
 Context: ${context}`;
 
-    const script = await callClaudeHealth(prompt, context, true, LLM_MODELS.medicalQA, 200);
+    const script = await callClaudeHealth(prompt, context, true, LLM_MODELS.audioBrief, LLM_TOKEN_LIMITS.audioBrief);
 
     if (btn) { btn.textContent = '⏸ Stop'; btn.disabled = false; }
     _audioBriefPlaying = true;
