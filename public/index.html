@@ -2229,6 +2229,8 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 
 <script src="/config.js"></script>
 <script src="/expense-utils.js"></script>
+<!-- AI configuration — model names, token limits, feature flags. Single source of truth. -->
+<script src="/ai-config.js"></script>
 <script>if(typeof window.FAMILYOS_OCR_CONFIG==='undefined')window.FAMILYOS_OCR_CONFIG={provider:"openai",openaiKey:"",anthropicKey:""};if(typeof window.FAMILYOS_GMAIL_CLIENT_ID==='undefined')window.FAMILYOS_GMAIL_CLIENT_ID="";</script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
@@ -2308,27 +2310,72 @@ try {
 }
 
 // ══ STATE ══
-// ── LLM MODEL CONFIG ──────────────────────────
-const LLM_MODELS = {
-  // Medical report analysis — accuracy critical
-  medicalReports: "claude-sonnet-4-20250514",
-
-  // Ask AI medical questions — accuracy critical
-  medicalQA: "claude-sonnet-4-20250514",
-
-  // Medication parsing from voice/photo
-  medicationParse: "claude-sonnet-4-20250514",
-
-  // Visit notes parsing — moderate complexity
-  visitNotes: "claude-haiku-4-5-20251001",
-
-  // Receipt OCR and pasted text parsing
-  receiptOcr: "claude-haiku-4-5-20251001",
-
-  // OpenAI models
-  openaiOcr: "gpt-4o",
-  openaiFallback: "gpt-4o-mini",
+// ── AI CONFIGURATION (imported from /ai-config.js) ───────────────────────────
+// Edit model/token/flag values in public/ai-config.js, not here.
+// If ai-config.js failed to load, fall back to safe Haiku-primary defaults so
+// the UI still renders. The Cloud Function allow-lists enforce server-side.
+const LLM_MODELS = window.LLM_MODELS || {
+  medicalVision:           "claude-sonnet-4-20250514",
+  medicalLabExtraction:    "claude-haiku-4-5-20251001",
+  medicalReportsSynthesis: "claude-haiku-4-5-20251001",
+  medicalQA:               "claude-haiku-4-5-20251001",
+  medicationParse:         "claude-haiku-4-5-20251001",
+  visitNotes:              "claude-haiku-4-5-20251001",
+  doctorSummary:           "claude-haiku-4-5-20251001",
+  audioBrief:              "claude-haiku-4-5-20251001",
+  gmailParsing:            "gpt-4o-mini",
+  expenseInsights:         "gpt-4o-mini",
+  receiptOcr:              "claude-haiku-4-5-20251001",
+  openaiVision:            "gpt-4o",
+  openaiFallback:          "gpt-4o-mini",
+  medicalReports:          "claude-sonnet-4-20250514",  // deprecated alias
+  openaiOcr:               "gpt-4o",                    // deprecated alias
 };
+const LLM_TOKEN_LIMITS = window.LLM_TOKEN_LIMITS || {
+  emailParsing: 150, expenseInsights: 160, healthQA: 700, audioBrief: 200,
+  medicalLabPage: 600, medicalReportSynthesis: 400, medicationParse: 300,
+  visitNotes: 400, doctorSummary: 1200, medicalVision: 800, receiptOcr: 200,
+  generateAISummary: 550, careChatExtended: 800,
+};
+const HEALTH_CONTEXT_LIMITS = window.HEALTH_CONTEXT_LIMITS || {
+  maxReports: 3, maxReportSummaryChars: 120, maxKeyFindingsPerReport: 3,
+  maxVisits: 2, maxNotes: 3, maxMedications: 10,
+};
+const AI_FEATURE_DEFAULTS = window.AI_FEATURE_DEFAULTS || {
+  emailParsing: true, expenseInsights: true, healthQA: true, audioBrief: true,
+  medicalImageAnalysis: true, medicationParse: true, visitNotesAI: true,
+  doctorSummary: true, voiceInput: true,
+};
+
+// ── AI Feature Flags ─────────────────────────────────────────────────────────
+// Resolves per-family feature flags. Flag sources (later overrides earlier):
+//   1. AI_FEATURE_DEFAULTS (ai-config.js)
+//   2. families/{fid}.aiFeatures  (per-family Firestore overrides)
+//   3. families/{fid}.plan === 'free'  (auto-disables premium features)
+// Result is cached for the session — call refreshAIFlags() after plan changes.
+let _aiFlags = null;
+async function getAIFeatureFlags() {
+  if (_aiFlags) return _aiFlags;
+  const defaults = { ...AI_FEATURE_DEFAULTS };
+  try {
+    if (!FID || !db) return defaults;
+    const famSnap = await getDoc(doc(db, `families/${FID}`));
+    const fam = famSnap.data() || {};
+    const overrides = { ...(fam.aiFeatures || {}) };
+    if (fam.plan === 'free') {
+      overrides.medicalImageAnalysis = overrides.medicalImageAnalysis ?? false;
+      overrides.doctorSummary = overrides.doctorSummary ?? false;
+      overrides.audioBrief = overrides.audioBrief ?? false;
+    }
+    _aiFlags = { ...defaults, ...overrides };
+  } catch (e) {
+    console.warn('Could not load AI feature flags, using defaults:', e?.message);
+    _aiFlags = defaults;
+  }
+  return _aiFlags;
+}
+function refreshAIFlags() { _aiFlags = null; }
+window.refreshAIFlags = refreshAIFlags;
 // ─────────────────────────────────────────────
 let CU=null, FID=null, FD=null, myRole=null, myPerms=null;
 let myName='Me', partnerName='Partner';

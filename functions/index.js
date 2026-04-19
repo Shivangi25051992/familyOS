@@ -26,6 +26,27 @@ const LLM_MODELS = {
 initializeApp();
 const db = getFirestore();
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI FEATURE FLAGS (server-side)
+// Check if an AI feature is enabled for a family.
+// Reads families/{fid}.aiFeatures and families/{fid}.plan.
+// Returns true (enabled) by default; fails open — never silently breaks prod.
+// ─────────────────────────────────────────────────────────────────────────────
+const _PREMIUM_FLAGS = ["medicalImageAnalysis", "doctorSummary", "audioBrief"];
+async function isAIFeatureEnabled(fid, flag) {
+  try {
+    const snap = await db.collection("families").doc(fid).get();
+    const fam = snap.data() || {};
+    const overrides = fam.aiFeatures || {};
+    if (fam.plan === "free" && _PREMIUM_FLAGS.includes(flag)) {
+      return overrides[flag] ?? false;
+    }
+    return overrides[flag] ?? true;
+  } catch {
+    return true;
+  }
+}
+
 // Secrets
 const GOOGLE_CLIENT_ID = defineSecret("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = defineSecret("GOOGLE_CLIENT_SECRET");
