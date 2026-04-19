@@ -8249,24 +8249,51 @@ function checkBillDuplicate(newBill, existingBills) {
   return { isDuplicate: false };
 }
 
+// Build the chat / Q&A context block sent alongside every health AI call.
+// All caps pulled from HEALTH_CONTEXT_LIMITS (ai-config.js). These caps are
+// the single biggest input-token lever: trimming context reduces cost on
+// EVERY health AI call (Care Chat, askHealthAI, audioBrief, doctorSummary,
+// medication parse — anything that passes this string). Reports are already
+// sorted newest-first by sortReportsNewest when set into activePatientData.
 function buildHealthChatContext(profile){
-  const meds = activePatientData.medications.filter(m => m.active !== false);
-  const reports = activePatientData.reports.slice(0, 5);
-  const visits = activePatientData.visits.slice(0, 3);
-  const notes = activePatientData.notes.slice(0, 5);
+  const L = HEALTH_CONTEXT_LIMITS;
+  const meds = activePatientData.medications
+    .filter(m => m.active !== false)
+    .slice(0, L.maxMedications);
+  const reports = activePatientData.reports.slice(0, L.maxReports);
+  const visits = activePatientData.visits.slice(0, L.maxVisits);
+  const notes = activePatientData.notes.slice(0, L.maxNotes);
   const billsTotal = activePatientData.bills.reduce((sum, b) => sum + (b.amount || 0), 0);
+
   const medLines = meds.map(m => {
     const dur = getMedDurationStatus(m);
-    const durStr = dur ? `duration ${dur.daysLeft < 0 ? 'complete' : dur.daysLeft + 1 + 'd left'} (ends ${dur.endDate})` : '';
-    return `- ${m.name} ${m.dose} ${m.frequency}${m.timing ? ' · ' + m.timing : ''}${durStr ? ' · ' + durStr : ''}${m.notes ? ' · ' + m.notes : ''}`;
+    const durStr = dur
+      ? ` · ${dur.daysLeft < 0 ? 'complete' : (dur.daysLeft + 1) + 'd left'} (ends ${dur.endDate})`
+      : '';
+    const noteStr = m.notes ? ` · ${String(m.notes).slice(0, 60)}` : '';
+    return `- ${m.name} ${m.dose || ''} ${m.frequency || ''}${m.timing ? ' · ' + m.timing : ''}${durStr}${noteStr}`;
   }).join('\n');
+
   const reportLines = reports.map(r => {
-    const key = (r.keyFindings || []).slice(0, 4).map(f => `${f.name}: ${f.value}${f.unit ? ' ' + f.unit : ''} (${f.flag || 'normal'})`).join('; ');
-    return `- [${r.date || 'unknown'}] ${r.title}: ${r.aiSummary || ''}${key ? ' | Key: ' + key : ''}`;
+    // Cap aiSummary per report; previously unbounded (often 300-500 chars).
+    // Trimmed summary is still enough for LLM to reason over the finding.
+    const summary = (r.aiSummary || '').slice(0, L.maxReportSummaryChars);
+    const key = (r.keyFindings || [])
+      .slice(0, L.maxKeyFindingsPerReport)
+      .map(f => `${f.name}: ${f.value}${f.unit ? ' ' + f.unit : ''} (${f.flag || 'normal'})`)
+      .join('; ');
+    return `- [${r.date || 'unknown'}] ${r.title || 'report'}: ${summary}${key ? ' | ' + key : ''}`;
   }).join('\n');
-  const visitLines = visits.map(v => `- [${v.date || 'unknown'}] ${v.hospital}: ${v.notes || ''}`).join('\n');
-  const noteLines = notes.map(n => `- [${n.date || 'today'}] ${n.category || 'note'}: ${n.text}`).join('\n');
-  const context = `
+
+  const visitLines = visits
+    .map(v => `- [${v.date || 'unknown'}] ${v.hospital || 'visit'}: ${String(v.notes || '').slice(0, 100)}`)
+    .join('\n');
+
+  const noteLines = notes
+    .map(n => `- [${n.date || 'today'}] ${n.category || 'note'}: ${String(n.text || '').slice(0, 100)}`)
+    .join('\n');
+
+  return `
 Patient: ${profile.name}, ${profile.relation}, ${profile.diagnosis}
 Diagnosed: ${profile.diagnosedOn || 'unknown'} | Blood group: ${profile.bloodGroup || 'unknown'}
 Treating hospital: ${profile.treatingHospital || 'unknown'} | Doctor: ${profile.treatingDoctor || 'unknown'}
@@ -8281,7 +8308,6 @@ Recent care notes:
 ${noteLines || '- None recorded'}
 Total bills so far: ${fmt(billsTotal)}
     `.trim();
-  return context;
 }
 
 const VITAL_RANGES = {
