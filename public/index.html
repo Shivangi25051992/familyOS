@@ -2094,9 +2094,11 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-title">Add Health Bill <button class="modal-close" onclick="closeModal('modal-health-bill')">✕</button></div>
-    <div style="text-align:center;padding:20px 0;margin-bottom:15px">
-       <button class="btn-primary" onclick="document.getElementById('hb-photo').click()">📷 Photograph Bill</button>
-       <input type="file" id="hb-photo" accept="image/*" capture="environment" style="display:none" onchange="handleHealthBillPhoto(this)">
+    <div style="text-align:center;padding:20px 0;margin-bottom:15px;display:flex;gap:10px;justify-content:center">
+       <button class="btn-primary" onclick="document.getElementById('hb-photo-camera').click()">📷 Take Photo</button>
+       <button class="btn-secondary" onclick="document.getElementById('hb-photo-gallery').click()">🖼️ Select Image</button>
+       <input type="file" id="hb-photo-camera" accept="image/*" capture="environment" style="display:none" onchange="handleHealthBillPhoto(this)">
+       <input type="file" id="hb-photo-gallery" accept="image/*" style="display:none" onchange="handleHealthBillPhoto(this)">
     </div>
     <div id="hb-preview" style="display:none">
        <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="hb-date" type="date"></div>
@@ -5454,15 +5456,20 @@ function addCareChatMessage(role, text, isLoading = false) {
     box-shadow:${isUser ? '0 4px 12px rgba(201,168,76,0.2)' : '0 2px 8px rgba(0,0,0,0.3)'};
   `;
   
-  bubble.textContent = text;
+  // Use innerHTML for formatted text (markdown-like)
+  if (!isUser && !isLoading) {
+    bubble.innerHTML = formatChatResponse(text);
+  } else {
+    bubble.textContent = text;
+  }
   
   msgDiv.appendChild(bubble);
   historyEl.appendChild(msgDiv);
   
-  // Scroll to bottom smoothly
-  historyEl.scrollTo({
-    top: historyEl.scrollHeight,
-    behavior: 'smooth'
+  // Scroll to show the new message - use requestAnimationFrame to ensure DOM has updated
+  requestAnimationFrame(() => {
+    // Scroll to bottom to show the latest message
+    historyEl.scrollTop = historyEl.scrollHeight;
   });
 }
 
@@ -8962,7 +8969,7 @@ async function compressReportImage(file) {
   });
 }
 
-async function convertPDFToImage(file) {
+async function convertPDFToImage(file, pageNumber = 1) {
   return new Promise(async (resolve, reject) => {
     try {
       // Load PDF.js library if not already loaded
@@ -8978,7 +8985,7 @@ async function convertPDFToImage(file) {
       
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const page = await pdf.getPage(1); // First page only
+      const page = await pdf.getPage(pageNumber);
       
       const viewport = page.getViewport({ scale: 2.0 });
       const canvas = document.createElement('canvas');
@@ -8997,6 +9004,28 @@ async function convertPDFToImage(file) {
       reject(e);
     }
   });
+}
+
+async function getPDFPageCount(file) {
+  try {
+    // Load PDF.js library if not already loaded
+    if (!window.pdfjsLib) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      };
+      document.head.appendChild(script);
+      await new Promise(r => script.onload = r);
+    }
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    return pdf.numPages;
+  } catch(e) {
+    console.error('Failed to get PDF page count:', e);
+    return 1;
+  }
 }
 
 function startVoiceInput(targetInputId, onResult) {
@@ -9050,32 +9079,54 @@ async function handleHealthReport(input) {
     
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const pageNum = existingImages.length + i + 1;
-      const totalPages = existingImages.length + files.length;
-      
-      // Update progress
-      if (uploadDiv) {
-        uploadDiv.innerHTML = `
-          <div style="text-align:center;padding:60px 20px">
-            <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
-            <div style="font-size:14px;font-weight:600;margin-bottom:8px">Processing Page ${pageNum}/${totalPages}...</div>
-            <div style="font-size:11px;color:var(--text-faint)">AI is analyzing the document</div>
-          </div>
-        `;
-      }
       
       // Check if PDF or image
       const isPDF = file.type === 'application/pdf';
-      let base64NoPrefix;
       
       if (isPDF) {
-        showToast(`Converting PDF page ${pageNum}...`);
-        base64NoPrefix = await convertPDFToImage(file);
+        // Get PDF page count and convert all pages
+        const pdfPageCount = await getPDFPageCount(file);
+        console.log(`📄 PDF has ${pdfPageCount} pages`);
+        showToast(`Converting ${pdfPageCount}-page PDF...`);
+        
+        for (let pdfPage = 1; pdfPage <= pdfPageCount; pdfPage++) {
+          const pageNum = existingImages.length + base64Images.length + 1;
+          const totalPages = existingImages.length + files.length - i - 1 + pdfPageCount - pdfPage + 1 + base64Images.length;
+          
+          // Update progress
+          if (uploadDiv) {
+            uploadDiv.innerHTML = `
+              <div style="text-align:center;padding:60px 20px">
+                <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px">Converting PDF Page ${pdfPage}/${pdfPageCount}...</div>
+                <div style="font-size:11px;color:var(--text-faint)">Extracting images from PDF</div>
+              </div>
+            `;
+          }
+          
+          const base64NoPrefix = await convertPDFToImage(file, pdfPage);
+          base64Images.push(base64NoPrefix);
+        }
+        
+        showToast(`✓ Converted ${pdfPageCount} pages from PDF`);
       } else {
-        base64NoPrefix = await compressReportImage(file);
+        // Regular image file
+        const pageNum = existingImages.length + base64Images.length + 1;
+        
+        // Update progress
+        if (uploadDiv) {
+          uploadDiv.innerHTML = `
+            <div style="text-align:center;padding:60px 20px">
+              <div class="ring" style="width:50px;height:50px;margin:0 auto 20px"></div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:8px">Processing Page ${pageNum}...</div>
+              <div style="font-size:11px;color:var(--text-faint)">AI is analyzing the document</div>
+            </div>
+          `;
+        }
+        
+        const base64NoPrefix = await compressReportImage(file);
+        base64Images.push(base64NoPrefix);
       }
-      
-      base64Images.push(base64NoPrefix);
     }
     
     // If adding to existing report, merge images
@@ -9152,10 +9203,40 @@ Respond with JSON only. No markdown. No explanation.`;
         const allFindings = allAnalyses.flatMap(a => a.keyFindings || []);
         reportData.keyFindings = allFindings;
         
-        // Combine summaries
-        const allSummaries = allAnalyses.map((a, i) => `Page ${i+1}: ${a.summary || a.aiSummary || ''}`).join(' ');
-        reportData.aiSummary = allSummaries;
-        reportData.summary = allSummaries;
+        // Create comprehensive summary by analyzing all findings together
+        const findingsSummary = allFindings.map(f => 
+          `${f.name}: ${f.value}${f.unit || ''} ${f.flag !== 'normal' ? '[' + f.flag.toUpperCase() + ']' : ''}`
+        ).join(', ');
+        
+        // Use AI to create a coherent summary from all findings
+        const comprehensivePrompt = `Create a comprehensive 3-4 sentence summary of this ${allImages.length}-page medical report. 
+
+Key findings across all pages: ${findingsSummary}
+
+Instructions:
+1. Mention the report type (e.g., "Complete health checkup with ${allFindings.length} parameters")
+2. Highlight any ABNORMAL findings (high/low/critical flags)
+3. Note any concerning patterns or conditions suggested by abnormal values (e.g., thyroid issues, kidney function, liver health)
+4. Keep it clear and actionable for a family caregiver
+5. Do NOT just list page-by-page, synthesize the overall health picture
+
+Return ONLY the summary text, no JSON.`;
+
+        try {
+          const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+          reportData.aiSummary = comprehensiveSummary;
+          reportData.summary = comprehensiveSummary;
+        } catch (e) {
+          console.warn('Comprehensive summary failed, using fallback');
+          reportData.aiSummary = `${allImages.length}-page report analyzed. Key findings: ${findingsSummary.slice(0, 300)}...`;
+          reportData.summary = reportData.aiSummary;
+        }
+        
+        // Auto-detect potential health conditions from abnormal findings
+        const abnormalFindings = allFindings.filter(f => f.flag !== 'normal' && f.flag);
+        if (abnormalFindings.length > 0) {
+          reportData.concerningFindings = abnormalFindings.map(f => `${f.name}: ${f.value}${f.unit || ''} [${f.flag.toUpperCase()}]`);
+        }
       }
       
       reportData.allImages = allImages;
@@ -9199,15 +9280,45 @@ Respond with JSON only. No markdown. No explanation.`;
           const allFindings = allAnalyses.flatMap(a => a.keyFindings || []);
           reportData.keyFindings = allFindings;
           
-          // Combine summaries
-          const allSummaries = allAnalyses.map((a, i) => `Page ${i+1}: ${a.summary || a.aiSummary || ''}`).join(' ');
-          reportData.aiSummary = allSummaries;
-          reportData.summary = allSummaries;
+          // Create comprehensive summary by analyzing all findings together
+          const findingsSummary = allFindings.map(f => 
+            `${f.name}: ${f.value}${f.unit || ''} ${f.flag !== 'normal' ? '[' + f.flag.toUpperCase() + ']' : ''}`
+          ).join(', ');
+          
+          // Use AI to create a coherent summary from all findings
+          const comprehensivePrompt = `Create a comprehensive 3-4 sentence summary of this ${allImages.length}-page medical report. 
+          
+Key findings across all pages: ${findingsSummary}
+
+Instructions:
+1. Mention the report type (e.g., "Complete health checkup with ${allFindings.length} parameters")
+2. Highlight any ABNORMAL findings (high/low/critical flags)
+3. Note any concerning patterns or conditions suggested by abnormal values (e.g., thyroid issues, kidney function, liver health)
+4. Keep it clear and actionable for a family caregiver
+5. Do NOT just list page-by-page, synthesize the overall health picture
+
+Return ONLY the summary text, no JSON.`;
+
+          try {
+            const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+            reportData.aiSummary = comprehensiveSummary;
+            reportData.summary = comprehensiveSummary;
+          } catch (e) {
+            console.warn('Comprehensive summary failed, using fallback');
+            reportData.aiSummary = `${allImages.length}-page report analyzed. Key findings: ${findingsSummary.slice(0, 300)}...`;
+            reportData.summary = reportData.aiSummary;
+          }
           
           // Use most urgent urgency level
           const urgencies = allAnalyses.map(a => a.urgency).filter(Boolean);
           if (urgencies.includes('urgent')) reportData.urgency = 'urgent';
           else if (urgencies.includes('watch')) reportData.urgency = 'watch';
+          
+          // Auto-detect potential health conditions from abnormal findings
+          const abnormalFindings = allFindings.filter(f => f.flag !== 'normal' && f.flag);
+          if (abnormalFindings.length > 0) {
+            reportData.concerningFindings = abnormalFindings.map(f => `${f.name}: ${f.value}${f.unit || ''} [${f.flag.toUpperCase()}]`);
+          }
         }
         
         showToast(`Analyzed all ${allImages.length} pages ✓`);
@@ -10607,7 +10718,8 @@ window.goPage=(id,btn,subtitle)=>{
   const page=document.getElementById('page-'+pageId);
   if(page) page.classList.add('active');
   if(btn) btn.classList.add('active');
-  document.getElementById('topbar-sub').textContent=subtitle.toUpperCase();
+  const topbarSub = document.getElementById('topbar-sub');
+  if(topbarSub) topbarSub.textContent = subtitle ? subtitle.toUpperCase() : '';
   if(id==='more'||id==='settings') renderMembers();
   if(id==='home') renderCalendar();
   if(id==='activities') renderTasksHub();
@@ -11401,7 +11513,7 @@ function ashaAskChip(question) {
   console.log('📍 Active page:', document.querySelector('.page.active')?.id);
   console.log('👤 Active profile ID:', activeHealthProfileId);
   
-  // Route to active health chat if on health screen, else global Asha handler
+  // Always route to Care Chat if on health screen with active patient
   const activePage = document.querySelector('.page.active')?.id;
   if (activePage === 'page-health' && activeHealthProfileId) {
     console.log('✅ Opening Care Chat modal...');
@@ -11417,8 +11529,10 @@ function ashaAskChip(question) {
       }
     }, 300);
   } else {
-    console.log('ℹ️ Opening Asha input bar...');
-    ashaOpenWithQuery(question);
+    // For non-health screens: prompt user to select a patient first
+    console.log('⚠️ No active patient - redirecting to Health page');
+    showToast('Please select a patient from Health Records to use Asha AI');
+    goPage('page-health');
   }
 }
 
@@ -11453,7 +11567,7 @@ async function ashaSend() {
   if (!q) { ashaCloseInput(); return; }
   ashaCloseInput();
   
-  // If on health screen with active patient → route to health chat
+  // Always route to Care Chat if on health screen with active patient
   const activePage = document.querySelector('.page.active')?.id;
   if (activePage === 'page-health' && activeHealthProfileId) {
     openCareChatModal();
@@ -11465,8 +11579,9 @@ async function ashaSend() {
       }
     }, 300);
   } else {
-    showToast('Asha: ' + q.slice(0, 40) + '…');
-    // Future: global Asha handler for non-health screens
+    // For non-health screens: prompt user to select a patient first
+    showToast('Please select a patient from Health Records to use Asha AI');
+    goPage('page-health');
   }
 }
 
