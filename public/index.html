@@ -2328,8 +2328,6 @@ const LLM_MODELS = window.LLM_MODELS || {
   receiptOcr:              "claude-haiku-4-5-20251001",
   openaiVision:            "gpt-4o",
   openaiFallback:          "gpt-4o-mini",
-  medicalReports:          "claude-sonnet-4-20250514",  // deprecated alias
-  openaiOcr:               "gpt-4o",                    // deprecated alias
 };
 const LLM_TOKEN_LIMITS = window.LLM_TOKEN_LIMITS || {
   emailParsing: 150, expenseInsights: 160, healthQA: 700, audioBrief: 200,
@@ -8257,9 +8255,14 @@ function checkBillDuplicate(newBill, existingBills) {
 // sorted newest-first by sortReportsNewest when set into activePatientData.
 function buildHealthChatContext(profile){
   const L = HEALTH_CONTEXT_LIMITS;
-  const meds = activePatientData.medications
-    .filter(m => m.active !== false)
-    .slice(0, L.maxMedications);
+  // SAFETY NOTE — medications are intentionally NOT sliced.
+  // An elderly patient with multiple comorbidities may have 12-20 active meds.
+  // Omitting any of them from the AI's context would cause medically wrong
+  // answers ("what is dad taking?", interaction checks, etc.). Each med line
+  // is ~20 tokens, so even 25 active meds is ~500 tokens — negligible cost
+  // vs. the safety risk. L.maxMedications is kept in ai-config.js only as a
+  // documented reference value; it is NOT enforced here.
+  const meds = activePatientData.medications.filter(m => m.active !== false);
   const reports = activePatientData.reports.slice(0, L.maxReports);
   const visits = activePatientData.visits.slice(0, L.maxVisits);
   const notes = activePatientData.notes.slice(0, L.maxNotes);

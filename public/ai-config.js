@@ -43,11 +43,11 @@ window.LLM_MODELS = {
   openaiVision:             "gpt-4o",                     // non-medical vision fallback
   openaiFallback:           "gpt-4o-mini",                // legacy alias
 
-  // ── DEPRECATED KEYS (kept as aliases during migration) ──────────────────────
-  // These map old names to new models so older call sites keep working until
-  // all references are migrated in a single follow-up commit.
-  medicalReports:           "claude-sonnet-4-20250514",   // alias for medicalVision
-  openaiOcr:                "gpt-4o",                     // alias for openaiVision
+  // NOTE: Deprecated aliases `medicalReports` (→ Sonnet) and `openaiOcr` were
+  // removed after audit — no live call site in public/index.html references
+  // them. Older files (public/index-old*.html) may still mention them, but
+  // those are archived and not served. Re-add here only if you hit a runtime
+  // "undefined model" error.
 };
 
 // ─── Token Limits ─────────────────────────────────────────────────────────────
@@ -78,7 +78,11 @@ window.HEALTH_CONTEXT_LIMITS = {
   maxKeyFindingsPerReport: 3,     // was 4
   maxVisits:               2,     // was 3
   maxNotes:                3,     // was 5
-  maxMedications:         10,     // all active meds kept (safety-critical)
+  // maxMedications is documentation-only — the consumer
+  // (buildHealthChatContext) does NOT slice the medication list because
+  // omitting any active med from the AI's context is a patient-safety bug.
+  // Value kept here as a reference for the typical caseload size.
+  maxMedications:         10,
 };
 
 // ─── Feature Flags ────────────────────────────────────────────────────────────
