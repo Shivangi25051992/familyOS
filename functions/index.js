@@ -29,22 +29,25 @@
 //   5.  Never `firebase functions:secrets:access <name>` in shared terminals.
 //
 // ─── LLM MODEL MATRIX (cost per 1M tokens, input/output, approx Apr 2026) ────
+// Always double-check current rates at the provider console before using these
+// numbers in a finance report — rates change and this comment does not auto-
+// update. Values below reflect published list prices as of Apr 2026.
 //
 //   Task                         | Model                       | In / Out   | Why
 //   -----------------------------+-----------------------------+------------+----------------------
 //   Email / order parsing        | gpt-4o-mini                 | $0.15/$0.60| JSON mode, cheapest
-//     (fallback)                 | claude-haiku-4-5-20251001   | $1.00/$5.00| Anthropic when OpenAI down
+//     (fallback)                 | claude-haiku-4-5-20251001   | $0.80/$4.00| Anthropic when OpenAI down
 //   Expense insights             | gpt-4o-mini                 | $0.15/$0.60| same JSON extraction class
-//     (fallback)                 | claude-haiku-4-5-20251001   | $1.00/$5.00|
-//   Medical lab extraction       | claude-haiku-4-5-20251001   | $1.00/$5.00| 5x cheaper than Sonnet
-//   Medical report synthesis     | claude-haiku-4-5-20251001   | $1.00/$5.00| multi-page text synthesis
-//   Medical Q&A (Care Chat etc.) | claude-haiku-4-5-20251001   | $1.00/$5.00| routed via healthAIRaw
-//   Audio brief                  | claude-haiku-4-5-20251001   | $1.00/$5.00| short narrative output
-//   Doctor summary               | claude-haiku-4-5-20251001   | $1.00/$5.00| structured summary
-//   Medication voice parse       | claude-haiku-4-5-20251001   | $1.00/$5.00| short JSON
-//   Visit-note action items      | claude-haiku-4-5-20251001   | $1.00/$5.00| short bullets
+//     (fallback)                 | claude-haiku-4-5-20251001   | $0.80/$4.00|
+//   Medical lab extraction       | claude-haiku-4-5-20251001   | $0.80/$4.00| 4x cheaper than Sonnet
+//   Medical report synthesis     | claude-haiku-4-5-20251001   | $0.80/$4.00| multi-page text synthesis
+//   Medical Q&A (Care Chat etc.) | claude-haiku-4-5-20251001   | $0.80/$4.00| routed via healthAIRaw
+//   Audio brief                  | claude-haiku-4-5-20251001   | $0.80/$4.00| short narrative output
+//   Doctor summary               | claude-haiku-4-5-20251001   | $0.80/$4.00| structured summary
+//   Medication voice parse       | claude-haiku-4-5-20251001   | $0.80/$4.00| short JSON
+//   Visit-note action items      | claude-haiku-4-5-20251001   | $0.80/$4.00| short bullets
 //   Medical scans / X-ray / rads | claude-sonnet-4-20250514    | $3.00/$15.0| accuracy critical
-//   Bill OCR (client-side)       | claude-haiku-4-5-20251001   | $1.00/$5.00| Anthropic vision only
+//   Bill OCR (client-side)       | claude-haiku-4-5-20251001   | $0.80/$4.00| Anthropic vision only
 //
 // The authoritative source for these assignments is functions/ai-helpers.js
 // (server) and public/ai-config.js (client). Keep the two in sync when you
@@ -76,6 +79,8 @@ const {
   LLM_MODELS,
   LLM_TOKEN_LIMITS,
   resolveFeatureFlag: _resolveFeatureFlag,
+  isInsightsCacheValid,
+  INSIGHTS_CACHE_TTL_MS,
 } = require("./ai-helpers");
 
 initializeApp();
@@ -492,15 +497,16 @@ Email content:
 ${body}`;
 
   // ── PROVIDER 1: Anthropic Haiku (primary) ─────────────────────────────────
+  // Each provider path is independent — Anthropic always uses
+  // `anthropicFallback` (Haiku), never `gmailParsing` (which is the preferred
+  // cross-provider model for this task and today happens to be a GPT model).
+  // This avoids the footgun where bumping `gmailParsing` to "gpt-4o" would
+  // silently send an OpenAI model name to the Anthropic API.
   if (anthropicKey && anthropicKey.trim()) {
     try {
       const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });
       const parseRes = await anthropic.messages.create({
-        // If gmailParsing in LLM_MODELS is configured to GPT, fall back to the
-        // explicit Anthropic model name; otherwise trust whatever is set.
-        model: LLM_MODELS.gmailParsing !== "gpt-4o-mini"
-          ? LLM_MODELS.gmailParsing
-          : LLM_MODELS.anthropicFallback,
+        model: LLM_MODELS.anthropicFallback,
         max_tokens: LLM_TOKEN_LIMITS.emailParsing,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
@@ -886,15 +892,9 @@ exports.generateExpenseInsights = onCall(
     // ── Insights cache (4-hour TTL) ────────────────────────────────────────
     // Spending doesn't materially move hour-to-hour; returning a recent cached
     // set cuts ~50% of insight API calls without affecting user experience.
-    const INSIGHTS_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+    // Validity logic lives in ai-helpers.js so it is unit-testable.
     const cached = fam.aiInsightsCache;
-    if (
-      cached?.month === thisMonth &&
-      cached?.generatedAt?.toMillis &&
-      cached.generatedAt.toMillis() > Date.now() - INSIGHTS_CACHE_TTL_MS &&
-      Array.isArray(cached.insights) &&
-      cached.insights.length > 0
-    ) {
+    if (isInsightsCacheValid(cached, thisMonth, Date.now(), INSIGHTS_CACHE_TTL_MS)) {
       return {
         insights: cached.insights,
         summary: cached.summary,
@@ -951,6 +951,11 @@ Reply with exactly 2-3 bullet points, one per line. No numbering, no intro.`;
     let insights = [];
 
     // ── PROVIDER 1: Anthropic Haiku (primary) ──────────────────────────────
+    // `anthropicFallback` is intentional here — both email parsing and expense
+    // insights use Haiku on the Anthropic side (see model matrix at top of
+    // file). `LLM_MODELS.expenseInsights` is the preferred cross-provider
+    // model (GPT-4o-mini), so each provider path uses its own provider-
+    // specific constant and we never accidentally cross the streams.
     if (anthropicKey?.trim()) {
       try {
         const anthropic = new Anthropic({ apiKey: anthropicKey.trim() });

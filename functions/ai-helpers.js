@@ -57,9 +57,35 @@ function resolveFeatureFlag(famData, flag) {
   return true;
 }
 
+// ── INSIGHTS CACHE VALIDITY (pure) ───────────────────────────────────────────
+// Returns true iff the cached insights object is safe to return without
+// regenerating. Caller must fail open — if this returns false, regenerate.
+// `cached.generatedAt` is a Firestore Timestamp-shaped object with a
+// `.toMillis()` method; we duck-type it so tests can pass plain objects.
+//
+// Validity rules (ALL must hold):
+//   1. cached exists
+//   2. cached.month matches the current month ("YYYY-MM")
+//   3. cached.generatedAt.toMillis() is within ttlMs of now
+//   4. cached.insights is a non-empty array
+const INSIGHTS_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
+
+function isInsightsCacheValid(cached, currentMonth, nowMs, ttlMs = INSIGHTS_CACHE_TTL_MS) {
+  if (!cached) return false;
+  if (cached.month !== currentMonth) return false;
+  const generatedAt = cached.generatedAt;
+  if (!generatedAt || typeof generatedAt.toMillis !== "function") return false;
+  const age = nowMs - generatedAt.toMillis();
+  if (age < 0 || age > ttlMs) return false;
+  if (!Array.isArray(cached.insights) || cached.insights.length === 0) return false;
+  return true;
+}
+
 module.exports = {
   LLM_MODELS,
   LLM_TOKEN_LIMITS,
   PREMIUM_FLAGS,
   resolveFeatureFlag,
+  INSIGHTS_CACHE_TTL_MS,
+  isInsightsCacheValid,
 };
