@@ -2229,6 +2229,8 @@ input:checked+.tog-slider:before{transform:translateX(20px);background:#07070A}
 
 <script src="/config.js"></script>
 <script src="/expense-utils.js"></script>
+<!-- AI configuration — model names, token limits, feature flags. Single source of truth. -->
+<script src="/ai-config.js"></script>
 <script>if(typeof window.FAMILYOS_OCR_CONFIG==='undefined')window.FAMILYOS_OCR_CONFIG={provider:"openai",openaiKey:"",anthropicKey:""};if(typeof window.FAMILYOS_GMAIL_CLIENT_ID==='undefined')window.FAMILYOS_GMAIL_CLIENT_ID="";</script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script type="module">
@@ -2308,27 +2310,70 @@ try {
 }
 
 // ══ STATE ══
-// ── LLM MODEL CONFIG ──────────────────────────
-const LLM_MODELS = {
-  // Medical report analysis — accuracy critical
-  medicalReports: "claude-sonnet-4-20250514",
-
-  // Ask AI medical questions — accuracy critical
-  medicalQA: "claude-sonnet-4-20250514",
-
-  // Medication parsing from voice/photo
-  medicationParse: "claude-sonnet-4-20250514",
-
-  // Visit notes parsing — moderate complexity
-  visitNotes: "claude-haiku-4-5-20251001",
-
-  // Receipt OCR and pasted text parsing
-  receiptOcr: "claude-haiku-4-5-20251001",
-
-  // OpenAI models
-  openaiOcr: "gpt-4o",
-  openaiFallback: "gpt-4o-mini",
+// ── AI CONFIGURATION (imported from /ai-config.js) ───────────────────────────
+// Edit model/token/flag values in public/ai-config.js, not here.
+// If ai-config.js failed to load, fall back to safe Haiku-primary defaults so
+// the UI still renders. The Cloud Function allow-lists enforce server-side.
+const LLM_MODELS = window.LLM_MODELS || {
+  medicalVision:           "claude-sonnet-4-20250514",
+  medicalLabExtraction:    "claude-haiku-4-5-20251001",
+  medicalReportsSynthesis: "claude-haiku-4-5-20251001",
+  medicalQA:               "claude-haiku-4-5-20251001",
+  medicationParse:         "claude-haiku-4-5-20251001",
+  visitNotes:              "claude-haiku-4-5-20251001",
+  doctorSummary:           "claude-haiku-4-5-20251001",
+  audioBrief:              "claude-haiku-4-5-20251001",
+  gmailParsing:            "gpt-4o-mini",
+  expenseInsights:         "gpt-4o-mini",
+  receiptOcr:              "claude-haiku-4-5-20251001",
+  openaiVision:            "gpt-4o",
+  openaiFallback:          "gpt-4o-mini",
 };
+const LLM_TOKEN_LIMITS = window.LLM_TOKEN_LIMITS || {
+  emailParsing: 150, expenseInsights: 160, healthQA: 700, audioBrief: 200,
+  medicalLabPage: 600, medicalReportSynthesis: 400, medicationParse: 300,
+  visitNotes: 400, doctorSummary: 1200, medicalVision: 800, receiptOcr: 200,
+  generateAISummary: 550, careChatExtended: 800,
+};
+const HEALTH_CONTEXT_LIMITS = window.HEALTH_CONTEXT_LIMITS || {
+  maxReports: 3, maxReportSummaryChars: 120, maxKeyFindingsPerReport: 3,
+  maxVisits: 2, maxNotes: 3, maxMedications: 10,
+};
+const AI_FEATURE_DEFAULTS = window.AI_FEATURE_DEFAULTS || {
+  emailParsing: true, expenseInsights: true, healthQA: true, audioBrief: true,
+  medicalImageAnalysis: true, medicationParse: true, visitNotesAI: true,
+  doctorSummary: true, voiceInput: true,
+};
+
+// ── AI Feature Flags ─────────────────────────────────────────────────────────
+// Resolves per-family feature flags. Flag sources (later overrides earlier):
+//   1. AI_FEATURE_DEFAULTS (ai-config.js)
+//   2. families/{fid}.aiFeatures  (per-family Firestore overrides)
+//   3. families/{fid}.plan === 'free'  (auto-disables premium features)
+// Result is cached for the session — call refreshAIFlags() after plan changes.
+let _aiFlags = null;
+async function getAIFeatureFlags() {
+  if (_aiFlags) return _aiFlags;
+  const defaults = { ...AI_FEATURE_DEFAULTS };
+  try {
+    if (!FID || !db) return defaults;
+    const famSnap = await getDoc(doc(db, `families/${FID}`));
+    const fam = famSnap.data() || {};
+    const overrides = { ...(fam.aiFeatures || {}) };
+    if (fam.plan === 'free') {
+      overrides.medicalImageAnalysis = overrides.medicalImageAnalysis ?? false;
+      overrides.doctorSummary = overrides.doctorSummary ?? false;
+      overrides.audioBrief = overrides.audioBrief ?? false;
+    }
+    _aiFlags = { ...defaults, ...overrides };
+  } catch (e) {
+    console.warn('Could not load AI feature flags, using defaults:', e?.message);
+    _aiFlags = defaults;
+  }
+  return _aiFlags;
+}
+function refreshAIFlags() { _aiFlags = null; }
+window.refreshAIFlags = refreshAIFlags;
 // ─────────────────────────────────────────────
 let CU=null, FID=null, FD=null, myRole=null, myPerms=null;
 let myName='Me', partnerName='Partner';
@@ -5410,6 +5455,12 @@ window.sendCareChatQuery = async function() {
     return;
   }
   
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) {
+    showToast('AI health assistant is not available on your current plan');
+    return;
+  }
+  
   // Clear input
   input.value = '';
   
@@ -5420,10 +5471,11 @@ window.sendCareChatQuery = async function() {
   addCareChatMessage('assistant', '...', true);
   
   try {
-    // Call existing askHealthAI function
     const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
     const context = buildHealthChatContext(p);
-    const answer = await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, 800);
+    // Care Chat gets a slightly higher token budget than plain Q&A to allow
+    // richer compassionate answers; still bounded by healthQAHardCap on server.
+    const answer = await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, LLM_TOKEN_LIMITS.careChatExtended);
     
     // Remove loading message
     const historyEl = document.getElementById('care-chat-history');
@@ -7727,6 +7779,9 @@ async function sendHealthChat() {
   const q = input?.value?.trim();
   if(!q || !activeHealthProfileId) return;
 
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) { showToast('AI health assistant is not available on your plan'); return; }
+
   input.value = '';
   input.style.height = 'auto';
   btn.disabled = true;
@@ -7781,7 +7836,7 @@ async function sendHealthChat() {
 
   try {
     const context = buildHealthChatContext(p);
-    const answer = await callClaudeHealth(q, context, true, LLM_MODELS.medicalQA, 700);
+    const answer = await callClaudeHealth(q, context, true, LLM_MODELS.medicalQA, LLM_TOKEN_LIMITS.healthQA);
     const aiMsg = { role: 'ai', text: answer, t: Date.now() };
     _healthChatHistory.push(aiMsg);
     
@@ -7801,6 +7856,8 @@ async function sendHealthChat() {
 // ══ AI FUNCTIONS ══
 async function generateAISummary() {
   if(!activeHealthProfileId) return;
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) { showToast('AI summary is not available on your plan'); return; }
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   const lastUpdated = getTimestampMillis(p.aiSummaryUpdatedAt);
   const recentlyUpdated = lastUpdated && (Date.now() - lastUpdated) < 6 * 60 * 60 * 1000;
@@ -7825,7 +7882,7 @@ Recent visits: ${visits.map(v => `[${v.date}] ${v.notes}`).join(' | ') || 'None'
   const prompt = `Summarize the current status in 4-6 short bullet points. Use a short heading, mention the most recent report date, and highlight key risks or follow-ups. Be compassionate and clear.`;
 
   try {
-    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalReports, 550);
+    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalReportsSynthesis, LLM_TOKEN_LIMITS.generateAISummary);
     await updateDoc(doc(db, `families/${FID}/healthProfiles/${activeHealthProfileId}`), { aiSummary: summary, aiSummaryUpdatedAt: serverTimestamp(), aiSummaryStale: false, updatedAt: serverTimestamp() });
     document.getElementById('health-ai-summary-text').innerHTML = formatChatResponse(summary);
   } catch(e) { console.error(e); showToast('AI error'); }
@@ -7836,6 +7893,9 @@ async function handleHealthAsk() {
   const input = document.getElementById('health-ask-input');
   const q = input.value.trim();
   if(!q) return;
+
+  const flags = await getAIFeatureFlags();
+  if (!flags.healthQA) { showToast('AI Q&A is not available on your plan'); return; }
 
   const btn = document.getElementById('btn-health-ask');
   btn.disabled = true; btn.textContent = 'Thinking...';
@@ -7856,11 +7916,19 @@ async function handleHealthAsk() {
 async function askHealthAI(profileId, question) {
   const profile = data.healthProfiles.find(x => x.id === profileId);
   const context = buildHealthChatContext(profile);
-  return await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, 700);
+  return await callClaudeHealth(question, context, true, LLM_MODELS.medicalQA, LLM_TOKEN_LIMITS.healthQA);
 }
 
-async function callClaudeHealth(prompt, context, isCompassionatePersona = false, model = LLM_MODELS.medicalQA, maxTokens = 1000) {
-  // PHASE 12: Using Cloud Functions for secure API calls
+async function callClaudeHealth(
+  prompt,
+  context,
+  isCompassionatePersona = false,
+  model = LLM_MODELS.medicalQA,
+  maxTokens = LLM_TOKEN_LIMITS.healthQA
+) {
+  // PHASE 12: Cloud Function proxies the Anthropic call so the API key never
+  // leaves the server. `maxTokens` is passed through so the server can enforce
+  // a tight per-call cap (see LLM_TOKEN_LIMITS.healthQAHardCap for the ceiling).
   try {
     const healthAIRaw = httpsCallable(functions, 'healthAIRaw');
     const result = await healthAIRaw({
@@ -7868,7 +7936,8 @@ async function callClaudeHealth(prompt, context, isCompassionatePersona = false,
       prompt,
       context,
       isCompassionatePersona,
-      model
+      model,
+      maxTokens,
     });
     return result.data.text;
   } catch (error) {
@@ -8178,24 +8247,56 @@ function checkBillDuplicate(newBill, existingBills) {
   return { isDuplicate: false };
 }
 
+// Build the chat / Q&A context block sent alongside every health AI call.
+// All caps pulled from HEALTH_CONTEXT_LIMITS (ai-config.js). These caps are
+// the single biggest input-token lever: trimming context reduces cost on
+// EVERY health AI call (Care Chat, askHealthAI, audioBrief, doctorSummary,
+// medication parse — anything that passes this string). Reports are already
+// sorted newest-first by sortReportsNewest when set into activePatientData.
 function buildHealthChatContext(profile){
+  const L = HEALTH_CONTEXT_LIMITS;
+  // SAFETY NOTE — medications are intentionally NOT sliced.
+  // An elderly patient with multiple comorbidities may have 12-20 active meds.
+  // Omitting any of them from the AI's context would cause medically wrong
+  // answers ("what is dad taking?", interaction checks, etc.). Each med line
+  // is ~20 tokens, so even 25 active meds is ~500 tokens — negligible cost
+  // vs. the safety risk. L.maxMedications is kept in ai-config.js only as a
+  // documented reference value; it is NOT enforced here.
   const meds = activePatientData.medications.filter(m => m.active !== false);
-  const reports = activePatientData.reports.slice(0, 5);
-  const visits = activePatientData.visits.slice(0, 3);
-  const notes = activePatientData.notes.slice(0, 5);
+  const reports = activePatientData.reports.slice(0, L.maxReports);
+  const visits = activePatientData.visits.slice(0, L.maxVisits);
+  const notes = activePatientData.notes.slice(0, L.maxNotes);
   const billsTotal = activePatientData.bills.reduce((sum, b) => sum + (b.amount || 0), 0);
+
   const medLines = meds.map(m => {
     const dur = getMedDurationStatus(m);
-    const durStr = dur ? `duration ${dur.daysLeft < 0 ? 'complete' : dur.daysLeft + 1 + 'd left'} (ends ${dur.endDate})` : '';
-    return `- ${m.name} ${m.dose} ${m.frequency}${m.timing ? ' · ' + m.timing : ''}${durStr ? ' · ' + durStr : ''}${m.notes ? ' · ' + m.notes : ''}`;
+    const durStr = dur
+      ? ` · ${dur.daysLeft < 0 ? 'complete' : (dur.daysLeft + 1) + 'd left'} (ends ${dur.endDate})`
+      : '';
+    const noteStr = m.notes ? ` · ${String(m.notes).slice(0, 60)}` : '';
+    return `- ${m.name} ${m.dose || ''} ${m.frequency || ''}${m.timing ? ' · ' + m.timing : ''}${durStr}${noteStr}`;
   }).join('\n');
+
   const reportLines = reports.map(r => {
-    const key = (r.keyFindings || []).slice(0, 4).map(f => `${f.name}: ${f.value}${f.unit ? ' ' + f.unit : ''} (${f.flag || 'normal'})`).join('; ');
-    return `- [${r.date || 'unknown'}] ${r.title}: ${r.aiSummary || ''}${key ? ' | Key: ' + key : ''}`;
+    // Cap aiSummary per report; previously unbounded (often 300-500 chars).
+    // Trimmed summary is still enough for LLM to reason over the finding.
+    const summary = (r.aiSummary || '').slice(0, L.maxReportSummaryChars);
+    const key = (r.keyFindings || [])
+      .slice(0, L.maxKeyFindingsPerReport)
+      .map(f => `${f.name}: ${f.value}${f.unit ? ' ' + f.unit : ''} (${f.flag || 'normal'})`)
+      .join('; ');
+    return `- [${r.date || 'unknown'}] ${r.title || 'report'}: ${summary}${key ? ' | ' + key : ''}`;
   }).join('\n');
-  const visitLines = visits.map(v => `- [${v.date || 'unknown'}] ${v.hospital}: ${v.notes || ''}`).join('\n');
-  const noteLines = notes.map(n => `- [${n.date || 'today'}] ${n.category || 'note'}: ${n.text}`).join('\n');
-  const context = `
+
+  const visitLines = visits
+    .map(v => `- [${v.date || 'unknown'}] ${v.hospital || 'visit'}: ${String(v.notes || '').slice(0, 100)}`)
+    .join('\n');
+
+  const noteLines = notes
+    .map(n => `- [${n.date || 'today'}] ${n.category || 'note'}: ${String(n.text || '').slice(0, 100)}`)
+    .join('\n');
+
+  return `
 Patient: ${profile.name}, ${profile.relation}, ${profile.diagnosis}
 Diagnosed: ${profile.diagnosedOn || 'unknown'} | Blood group: ${profile.bloodGroup || 'unknown'}
 Treating hospital: ${profile.treatingHospital || 'unknown'} | Doctor: ${profile.treatingDoctor || 'unknown'}
@@ -8210,7 +8311,6 @@ Recent care notes:
 ${noteLines || '- None recorded'}
 Total bills so far: ${fmt(billsTotal)}
     `.trim();
-  return context;
 }
 
 const VITAL_RANGES = {
@@ -8844,7 +8944,7 @@ async function parseVitalsFromImage(file) {
   });
   const system = 'You are a medical OCR assistant. CRITICAL: Preserve exact decimal values. 91.1 must NOT be read as 97 or 91. 98.6°F must NOT become 99°F. Read every digit individually. Return temperatureUnit as "F" or "C". Plausible ranges: temp 85-110°F, SpO2 50-100%, pulse 20-250bpm. If a value seems implausible, return it anyway with a "suspicious:true" flag.';
   const prompt = 'Extract vital signs from this document. Return ONLY valid JSON with these keys (include only found values): bp_systolic, bp_diastolic, pulse, spo2, temperature, temperatureUnit, weight, bloodSugar, perfusionIndex, respirationRate, rawText. Example: {"bp_systolic":120,"bp_diastolic":80,"pulse":72,"spo2":98,"temperature":98.6,"temperatureUnit":"F","perfusionIndex":2.1,"respirationRate":18}';
-  const text = await callClaudeVision(system, prompt, base64NoPrefix);
+  const text = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
   const result = safeParseJSON(text);
   if(!result) return null;
   const out = result;
@@ -9216,7 +9316,7 @@ Respond with JSON only. No markdown. No explanation.`;
         const pagePrompt = `Analyse page ${i+1} of ${allImages.length} of this medical report for a patient with ${p.diagnosis}. Extract all test results, findings, and key information. ${prompt}`;
         
         try {
-          const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalReports);
+          const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
           const pageData = safeParseJSON(res);
           if (pageData) allAnalyses.push(pageData);
         } catch(e) {
@@ -9251,7 +9351,7 @@ Instructions:
 Return ONLY the summary text, no JSON.`;
 
         try {
-          const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+          const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReportsSynthesis, LLM_TOKEN_LIMITS.medicalReportSynthesis);
           reportData.aiSummary = comprehensiveSummary;
           reportData.summary = comprehensiveSummary;
         } catch (e) {
@@ -9293,7 +9393,7 @@ Return ONLY the summary text, no JSON.`;
           }
           
           try {
-            const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalReports);
+            const res = await callClaudeVision(system, pagePrompt, pageBase64, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
             const pageData = safeParseJSON(res);
             if (pageData) allAnalyses.push(pageData);
           } catch(e) {
@@ -9328,7 +9428,7 @@ Instructions:
 Return ONLY the summary text, no JSON.`;
 
           try {
-            const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReports, 400);
+            const comprehensiveSummary = await callClaudeHealth(comprehensivePrompt, findingsSummary, false, LLM_MODELS.medicalReportsSynthesis, LLM_TOKEN_LIMITS.medicalReportSynthesis);
             reportData.aiSummary = comprehensiveSummary;
             reportData.summary = comprehensiveSummary;
           } catch (e) {
@@ -9353,7 +9453,7 @@ Return ONLY the summary text, no JSON.`;
         
       } else {
         // Single page - analyze as before
-        const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalReports);
+        const res = await callClaudeVision(system, prompt, base64NoPrefix, LLM_MODELS.medicalLabExtraction, 'lab', LLM_TOKEN_LIMITS.medicalLabPage);
         reportData = safeParseJSON(res);
         
         if (!reportData) {
@@ -9629,8 +9729,28 @@ async function confirmSaveReport() {
   finally { isSavingReport = false; }
 }
 
-// PHASE 12: Using Cloud Functions for secure image analysis
-async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODELS.medicalReports) {
+// PHASE 12 + cost optimisation: Cloud Function proxies the Anthropic vision
+// call. Pass an `imageType` so the server can pick the cheapest safe model:
+//   'lab'  → Haiku  (lab reports — structured JSON extraction)
+//   'bill' → Haiku  (bill amount + date extraction)
+//   'scan' → Sonnet (X-rays, radiology — accuracy critical)
+//   'med'  → Haiku  (medication label / prescription photo)
+// The `model` default is kept as medicalVision (Sonnet) for backwards-compat
+// with any legacy caller; typed callers should pass the explicit model for
+// their use case plus the matching imageType.
+async function callClaudeVision(
+  system,
+  prompt,
+  base64NoPrefix,
+  model = LLM_MODELS.medicalVision,
+  imageType = 'lab',
+  maxTokens = undefined
+) {
+  const flags = await getAIFeatureFlags();
+  if (!flags.medicalImageAnalysis) {
+    showToast('Image analysis is not available on your current plan');
+    throw new Error('medicalImageAnalysis disabled');
+  }
   try {
     const healthAnalyzeImageRaw = httpsCallable(functions, 'healthAnalyzeImageRaw');
     const result = await healthAnalyzeImageRaw({
@@ -9638,7 +9758,9 @@ async function callClaudeVision(system, prompt, base64NoPrefix, model = LLM_MODE
       system,
       prompt,
       base64NoPrefix,
-      model
+      model,
+      imageType,
+      maxTokens,
     });
     return result.data.text;
   } catch (error) {
@@ -9749,9 +9871,18 @@ async function saveVisit() {
   if(!date || !hospital) return;
   try {
     const base = `families/${FID}/healthProfiles/${activeHealthProfileId}`;
-    const res = await callClaudeHealth(`Extract 3-5 key action items from these visit notes. Return as a JSON array of strings. Notes: ${notes}`, `Patient with ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).diagnosis}`, false, LLM_MODELS.visitNotes);
-    let actionItems = safeParseJSON(res);
-    if (!actionItems) actionItems = [res];
+    // Action-item extraction is an opt-in flag — if disabled, save visit
+    // without AI-derived items. The visit itself is still saved so the
+    // feature flag never blocks the core care-tracking workflow.
+    const flags = await getAIFeatureFlags();
+    let actionItems = [];
+    if (flags.visitNotesAI && notes) {
+      try {
+        const res = await callClaudeHealth(`Extract 3-5 key action items from these visit notes. Return as a JSON array of strings. Notes: ${notes}`, `Patient with ${data.healthProfiles.find(x=>x.id===activeHealthProfileId).diagnosis}`, false, LLM_MODELS.visitNotes, LLM_TOKEN_LIMITS.visitNotes);
+        actionItems = safeParseJSON(res);
+        if (!actionItems) actionItems = [res];
+      } catch (e) { console.warn('visit notes AI failed, saving without items:', e.message); }
+    }
     
     await addDoc(collection(db, `${base}/visits`), { date, hospital, doctor, type, notes, actionItems, nextVisit: next, addedAt: serverTimestamp() });
     await addDoc(collection(db, `${base}/timeline`), { date, type: 'visit', title: `${type.toUpperCase()} at ${hospital}`, detail: notes.slice(0, 100), addedAt: serverTimestamp() });
@@ -9767,7 +9898,7 @@ async function handleHealthBillPhoto(input) {
   try {
     const base64NoPrefix = await compressReportImage(file);
     const system = `You are a medical bill reader. Extract: amount (number), date (YYYY-MM-DD), hospital (string), category ('consultation'|'medicine'|'test'|'procedure'). Return JSON only.`;
-    const res = await callClaudeVision(system, "Extract bill details", base64NoPrefix, LLM_MODELS.receiptOcr);
+    const res = await callClaudeVision(system, "Extract bill details", base64NoPrefix, LLM_MODELS.receiptOcr, 'bill', LLM_TOKEN_LIMITS.receiptOcr);
     const b = safeParseJSON(res);
     if (!b) { showToast('Could not read bill format'); return; }
     document.getElementById('hb-date').value = b.date || todayStr();
@@ -9948,6 +10079,9 @@ async function deleteVital(vitalId) {
 async function generateDoctorSummary() {
   if(!activeHealthProfileId) return;
   
+  const flags = await getAIFeatureFlags();
+  if (!flags.doctorSummary) { showToast('Doctor summary is not available on your plan'); return; }
+  
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   const medications = activePatientData.medications.filter(m => m.active !== false);
   const reports = activePatientData.reports.slice(0, 10);
@@ -9969,7 +10103,7 @@ async function generateDoctorSummary() {
   const prompt = `Generate a clear, professional medical summary for a new doctor who has never seen this patient before. Format with markdown headings and bullet points. Include: diagnosis & timeline, current medications with dosages, recent test results with key findings, recent symptoms, current status, and key concerns/recommendations.`;
   
   try {
-    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.medicalQA, 1200);
+    const summary = await callClaudeHealth(prompt, context, false, LLM_MODELS.doctorSummary, LLM_TOKEN_LIMITS.doctorSummary);
     
     // Render summary in modal
     modalContent.innerHTML = `
@@ -10215,9 +10349,11 @@ function exportHealthPDF() {
 }
 
 async function parseMedVoice(transcript) {
+  const flags = await getAIFeatureFlags();
+  if (!flags.medicationParse) { showToast('Medication parsing is not available on your plan'); return; }
   showToast('Parsing...');
   try {
-    const res = await callClaudeHealth(`Extract medication details: name, dose, frequency, timing, durationDays (number), startDate (YYYY-MM-DD if stated), notes. Return JSON only. Text: ${transcript}`, "Parsing med voice", false, LLM_MODELS.medicationParse, 500);
+    const res = await callClaudeHealth(`Extract medication details: name, dose, frequency, timing, durationDays (number), startDate (YYYY-MM-DD if stated), notes. Return JSON only. Text: ${transcript}`, "Parsing med voice", false, LLM_MODELS.medicationParse, LLM_TOKEN_LIMITS.medicationParse);
     const m = safeParseJSON(res);
     if (!m) return;
     clearMedReview();
@@ -10364,6 +10500,10 @@ window.saveAllMedsFromReview = async function(){
 async function handleMedPhoto(input) {
   const file = input.files[0]; if(!file) return;
   
+  const flags = await getAIFeatureFlags();
+  if (!flags.medicationParse) { showToast('Medication parsing is not available on your plan'); return; }
+  if (!flags.medicalImageAnalysis) { showToast('Image analysis is not available on your plan'); return; }
+  
   // Show loading indicator in modal
   const singleFields = document.getElementById('med-single-fields');
   const reviewWrap = document.getElementById('med-review-wrap');
@@ -10405,7 +10545,7 @@ EXAMPLES OF OPTIONAL MEDICATIONS:
 - Anti-nausea meds marked "if vomiting"
 
 Return ONLY the JSON array, no other text.`;
-    const res = await callClaudeVision(system, "Extract medications", base64NoPrefix, LLM_MODELS.medicationParse);
+    const res = await callClaudeVision(system, "Extract medications", base64NoPrefix, LLM_MODELS.medicationParse, 'med', LLM_TOKEN_LIMITS.medicationParse);
     const meds = safeParseJSON(res);
     if(Array.isArray(meds) && meds.length) {
       pendingMedReview = meds;
@@ -10514,6 +10654,8 @@ function renderInsights(){
 window.fetchAIInsights=async function(){
   if(!FID||!functions) return;
   const btn=document.getElementById('btn-ai-insights');
+  const flags = await getAIFeatureFlags();
+  if (!flags.expenseInsights) { showToast('AI insights are not available on your plan'); return; }
   if(btn){ btn.disabled=true; btn.textContent='Thinking...'; }
   try{
     const genInsights=httpsCallable(functions,'generateExpenseInsights');
@@ -11778,6 +11920,9 @@ async function playHealthBrief() {
   if (!activeHealthProfileId) return;
   if (_audioBriefPlaying) { stopHealthBrief(); return; }
 
+  const flags = await getAIFeatureFlags();
+  if (!flags.audioBrief) { showToast('Audio brief is not available on your plan'); return; }
+
   const p = data.healthProfiles.find(x => x.id === activeHealthProfileId);
   if (!p) return;
 
@@ -11806,7 +11951,7 @@ Include: overall status, one key marker trend, today's medication status, one th
 End with an encouraging sentence. Keep it under 100 words. Plain sentences, no bullet points, no markdown.
 Context: ${context}`;
 
-    const script = await callClaudeHealth(prompt, context, true, LLM_MODELS.medicalQA, 200);
+    const script = await callClaudeHealth(prompt, context, true, LLM_MODELS.audioBrief, LLM_TOKEN_LIMITS.audioBrief);
 
     if (btn) { btn.textContent = '⏸ Stop'; btn.disabled = false; }
     _audioBriefPlaying = true;
